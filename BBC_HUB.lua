@@ -447,7 +447,7 @@ function Container:Toggle(opts)
     if type(opts.Settings) == "function" then
         local gear = create("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -(12 + 34 + 6), 0.5, 0), Size = UDim2.fromOffset(26, 26),
             BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 3 }, row)
-        local gi = icon(gear, opts.SettingsIcon or "sliders-horizontal", 17, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 3 })
+        local gi = icon(gear, opts.SettingsIcon or "settings", 17, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 3 })
         local sub, panel = subPanel(self, outer, 2)
         local open = false
         gear.MouseButton1Click:Connect(function()
@@ -460,6 +460,38 @@ function Container:Toggle(opts)
     end
     if state then safeCall(opts.Callback, state) end
     return obj
+end
+
+-- ---------- Player Preview ----------
+function Container:PlayerPreview(opts)
+    opts = opts or {}
+    local outer = newOuter(self, "Player Preview")
+    local previewFrame = create("Frame", { Size = UDim2.new(1, -16, 0, 200), Position = UDim2.fromOffset(8, 0), BackgroundTransparency = 0.3, LayoutOrder = self:_nextOrder() }, outer)
+    bind(previewFrame, "BackgroundColor3", "Surface2")
+    corner(previewFrame, 6)
+    stroke(previewFrame, "Accent", 0.3)
+    label(previewFrame, "PREVIEW", 11, "Muted", true, { Position = UDim2.fromOffset(10, 8), Size = UDim2.fromOffset(60, 16) })
+    local characterArea = create("Frame", { Position = UDim2.fromOffset(10, 30), Size = UDim2.new(1, -20, 0, 140), BackgroundTransparency = 0.8 }, previewFrame)
+    bind(characterArea, "BackgroundColor3", "Background")
+    corner(characterArea, 4)
+    local dummy = create("Frame", { Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(60, 100), BackgroundColor3 = Color3.fromRGB(45, 215, 105), BorderSizePixel = 0 }, characterArea)
+    corner(dummy, 4)
+    label(dummy, "BBC HUB", 14, "Text", true, { Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(80, 20), TextXAlignment = Enum.TextXAlignment.Center })
+    label(characterArea, "100", 10, "Accent", false, { Position = UDim2.fromOffset(5, 50), Size = UDim2.fromOffset(30, 14) })
+    label(characterArea, "1000m", 10, "Muted", false, { Position = UDim2.fromScale(0.5, 1), AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(40, 14), TextXAlignment = Enum.TextXAlignment.Center })
+    local buttonRow = create("Frame", { Position = UDim2.fromOffset(10, 175), Size = UDim2.new(1, -20, 0, 20), BackgroundTransparency = 1 }, previewFrame)
+    listLayout(buttonRow, 4, Enum.FillDirection.Horizontal)
+    local buttons = {"Highlight", "Box", "KDR", "Reports", "Tracers", "Arrows"}
+    for i, btnName in ipairs(buttons) do
+        local btn = create("TextButton", { Size = UDim2.fromOffset(70, 20), Text = btnName, TextSize = 10, FontFace = Library.Fonts.Regular, BackgroundTransparency = 0.2, AutoButtonColor = false, BorderSizePixel = 0, LayoutOrder = i }, buttonRow)
+        bind(btn, "BackgroundColor3", "Surface3")
+        bind(btn, "TextColor3", "Text")
+        corner(btn, 3)
+        btn.MouseButton1Click:Connect(function()
+            Library:Notify({ Title = "BBC HUB", Content = btnName .. " toggled", Duration = 1.5 })
+        end)
+    end
+    return { Frame = outer }
 end
 
 -- ---------- Slider ----------
@@ -2449,6 +2481,7 @@ end
 
 -- ---------------- VISUAIS ----------------
 local visuais = Window:Tab({ Name = "VISUAIS", Icon = "eye" })
+visuais:PlayerPreview({})
 local g = visuais:Groupbox({ Name = "ESP", Icon = "scan-eye", Side = "Left" })
 for _, n in ipairs({ "Jogador", "NPCs", "Corpo", "Recipiente", "Item no chão", "Itens de missão" }) do
     T(g, n, n == "Jogador" or n == "NPCs" or n == "Corpo")
