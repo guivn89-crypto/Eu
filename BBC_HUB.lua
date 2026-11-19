@@ -465,33 +465,163 @@ end
 -- ---------- Player Preview ----------
 function Container:PlayerPreview(opts)
     opts = opts or {}
-    local outer = newOuter(self, "Player Preview")
-    local previewFrame = create("Frame", { Size = UDim2.new(1, -16, 0, 200), Position = UDim2.fromOffset(8, 0), BackgroundTransparency = 0.3, LayoutOrder = self:_nextOrder() }, outer)
-    bind(previewFrame, "BackgroundColor3", "Surface2")
-    corner(previewFrame, 6)
-    stroke(previewFrame, "Accent", 0.3)
-    label(previewFrame, "PREVIEW", 11, "Muted", true, { Position = UDim2.fromOffset(10, 8), Size = UDim2.fromOffset(60, 16) })
-    local characterArea = create("Frame", { Position = UDim2.fromOffset(10, 30), Size = UDim2.new(1, -20, 0, 140), BackgroundTransparency = 0.8 }, previewFrame)
+    -- Abas com Groupbox escondem a List principal; então o preview nasce dentro da coluna.
+    local parentList = self.List
+    if type(self._column) == "function" then
+        parentList = self:_column(opts.Side or "Left")
+        self.List.Visible = false
+    end
+    local outer = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1, LayoutOrder = #parentList:GetChildren() + 1,
+    }, parentList)
+    outer:SetAttribute("SearchName", "Player Preview")
+    listLayout(outer, 0)
+
+    local card = create("Frame", { Size = UDim2.new(1, 0, 0, 236), BackgroundTransparency = 0.3 }, outer)
+    bind(card, "BackgroundColor3", "Surface2")
+    corner(card, 6)
+    stroke(card, "Accent", 0.3)
+    label(card, "PREVIEW", 11, "Muted", true, { Position = UDim2.fromOffset(10, 8), Size = UDim2.fromOffset(70, 16) })
+    local nameL = label(card, "", 11, "Accent", false, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 8), Size = UDim2.fromOffset(120, 16), TextXAlignment = Enum.TextXAlignment.Right })
+    nameL.Text = LocalPlayer.DisplayName or LocalPlayer.Name
+
+    local characterArea = create("Frame", { Position = UDim2.fromOffset(10, 28), Size = UDim2.new(1, -20, 0, 148), BackgroundTransparency = 0.8 }, card)
     bind(characterArea, "BackgroundColor3", "Background")
     corner(characterArea, 4)
-    local dummy = create("Frame", { Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(60, 100), BackgroundColor3 = Color3.fromRGB(45, 215, 105), BorderSizePixel = 0 }, characterArea)
-    corner(dummy, 4)
-    label(dummy, "BBC HUB", 14, "Text", true, { Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(80, 20), TextXAlignment = Enum.TextXAlignment.Center })
-    label(characterArea, "100", 10, "Accent", false, { Position = UDim2.fromOffset(5, 50), Size = UDim2.fromOffset(30, 14) })
-    label(characterArea, "1000m", 10, "Muted", false, { Position = UDim2.fromScale(0.5, 1), AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(40, 14), TextXAlignment = Enum.TextXAlignment.Center })
-    local buttonRow = create("Frame", { Position = UDim2.fromOffset(10, 175), Size = UDim2.new(1, -20, 0, 20), BackgroundTransparency = 1 }, previewFrame)
-    listLayout(buttonRow, 4, Enum.FillDirection.Horizontal)
-    local buttons = {"Highlight", "Box", "KDR", "Reports", "Tracers", "Arrows"}
-    for i, btnName in ipairs(buttons) do
-        local btn = create("TextButton", { Size = UDim2.fromOffset(70, 20), Text = btnName, TextSize = 10, FontFace = Library.Fonts.Regular, BackgroundTransparency = 0.2, AutoButtonColor = false, BorderSizePixel = 0, LayoutOrder = i }, buttonRow)
-        bind(btn, "BackgroundColor3", "Surface3")
-        bind(btn, "TextColor3", "Text")
-        corner(btn, 3)
-        btn.MouseButton1Click:Connect(function()
-            Library:Notify({ Title = "BBC HUB", Content = btnName .. " toggled", Duration = 1.5 })
+
+    local viewport = create("ViewportFrame", {
+        Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
+        Ambient = Color3.fromRGB(170, 170, 170), LightColor = Color3.new(1, 1, 1),
+        LightDirection = Vector3.new(-1, -0.6, -1),
+    }, characterArea)
+    corner(viewport, 4)
+    local world = create("WorldModel", {}, viewport)
+    local camera = create("Camera", { FieldOfView = 30 }, viewport)
+    viewport.CurrentCamera = camera
+
+    local healthL = label(characterArea, "100", 10, "Accent", false, { Position = UDim2.fromOffset(6, 6), Size = UDim2.fromOffset(40, 14), ZIndex = 2 })
+    label(characterArea, "1000m", 10, "Muted", false, { AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -4), Size = UDim2.fromOffset(50, 14), TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 2 })
+
+    -- ---------- avatar 3D ----------
+    local model, basePivot, yaw = nil, CFrame.new(), 0
+    local healthConn
+    local function setHealth(h)
+        healthL.Text = tostring(math.clamp(math.floor((tonumber(h) or 0) + 0.5), 0, 9999))
+    end
+    local function mount(inst, healthSource)
+        if healthConn then healthConn:Disconnect(); healthConn = nil end
+        if model then model:Destroy(); model = nil end
+        model = inst
+        for _, d in ipairs(model:GetDescendants()) do
+            if d:IsA("BasePart") then
+                d.Anchored = true; d.CanCollide = false; d.CanQuery = false; d.CanTouch = false
+            elseif d:IsA("Script") or d:IsA("LocalScript") or d:IsA("ModuleScript") then
+                d:Destroy()
+            end
+        end
+        model.Parent = world
+        local bbox, size = model:GetBoundingBox()
+        basePivot = model:GetPivot() - bbox.Position
+        yaw = 0
+        model:PivotTo(basePivot)
+        local maxDim = math.max(size.X, size.Y, size.Z)
+        local dist = (maxDim > 0 and maxDim or 6) * 2.2
+        camera.CFrame = CFrame.lookAt(Vector3.new(0, 0, -dist), Vector3.new(0, 0, 0))
+        local hum = healthSource or model:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Parent then
+            setHealth(hum.Health)
+            healthConn = hum.HealthChanged:Connect(setHealth)
+        else
+            setHealth(100)
+        end
+    end
+
+    local function fallbackFigure()
+        local m = Instance.new("Model")
+        local function piece(name, size, pos)
+            return create("Part", {
+                Name = name, Size = size, Position = pos, Anchored = true,
+                CanCollide = false, CanQuery = false, CanTouch = false,
+                Material = Enum.Material.SmoothPlastic, Color = Color3.fromRGB(45, 215, 105),
+                TopSurface = Enum.SurfaceType.Smooth, BottomSurface = Enum.SurfaceType.Smooth,
+            }, m)
+        end
+        piece("Head", Vector3.new(2, 2, 2), Vector3.new(0, 4.6, 0))
+        piece("Torso", Vector3.new(4, 4, 2), Vector3.new(0, 1.6, 0))
+        piece("Left Arm", Vector3.new(1, 4, 1), Vector3.new(-2.5, 1.6, 0))
+        piece("Right Arm", Vector3.new(1, 4, 1), Vector3.new(2.5, 1.6, 0))
+        piece("Left Leg", Vector3.new(1.6, 4, 1), Vector3.new(-1, -2.4, 0))
+        piece("Right Leg", Vector3.new(1.6, 4, 1), Vector3.new(1, -2.4, 0))
+        return m
+    end
+
+    local function loadAvatar()
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            local ok, clone = pcall(function() return char:Clone() end)
+            if ok and clone then
+                mount(clone, hum)
+                return
+            end
+        end
+        task.spawn(function()
+            local ok, m = pcall(function() return Players:CreateHumanoidModelFromUserId(LocalPlayer.UserId) end)
+            if ok and m and world.Parent then mount(m) end
         end)
     end
-    return { Frame = outer }
+    mount(fallbackFigure())
+    loadAvatar()
+
+    local charConn = LocalPlayer.CharacterAdded:Connect(function()
+        task.wait(0.5)
+        if world.Parent then loadAvatar() end
+    end)
+
+    -- ---------- botões rápidos ----------
+    local buttonRow = create("Frame", { Position = UDim2.fromOffset(10, 184), Size = UDim2.new(1, -20, 0, 44), BackgroundTransparency = 1 }, card)
+    create("UIGridLayout", {
+        CellSize = UDim2.new(1 / 3, -3, 0, 20), CellPadding = UDim2.fromOffset(4, 4),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, buttonRow)
+    local buttons = {"Highlight", "Box", "KDR", "Reports", "Tracers", "Arrows"}
+    for i, btnName in ipairs(buttons) do
+        local state = false
+        local btn = create("TextButton", {
+            Size = UDim2.fromScale(1, 1), Text = btnName, TextSize = 10, FontFace = Library.Fonts.Regular,
+            AutoButtonColor = false, BorderSizePixel = 0, LayoutOrder = i, BackgroundTransparency = 0.2,
+        }, buttonRow)
+        corner(btn, 3)
+        bind(btn, "BackgroundColor3", function() return state and Library.Theme.Accent or Library.Theme.Surface3 end)
+        bind(btn, "TextColor3", function() return state and Color3.fromRGB(20, 20, 20) or Library.Theme.Text end)
+        local function paint()
+            btn.BackgroundColor3 = state and Library.Theme.Accent or Library.Theme.Surface3
+            btn.TextColor3 = state and Color3.fromRGB(20, 20, 20) or Library.Theme.Text
+        end
+        paint()
+        btn.MouseButton1Click:Connect(function()
+            state = not state
+            paint()
+            Library:Notify({ Title = "BBC HUB", Content = btnName .. (state and " ativado" or " desativado"), Duration = 1.5 })
+        end)
+    end
+
+    local conn
+    conn = RunService.RenderStepped:Connect(function(dt)
+        if not card.Parent then
+            conn:Disconnect()
+            if charConn then charConn:Disconnect() end
+            if healthConn then healthConn:Disconnect() end
+            return
+        end
+        if model then
+            yaw += dt * 0.5
+            model:PivotTo(CFrame.Angles(0, yaw, 0) * basePivot)
+        end
+    end)
+
+    return { Frame = outer, Viewport = viewport, Card = card }
 end
 
 -- ---------- Slider ----------
