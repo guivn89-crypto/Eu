@@ -473,7 +473,7 @@ function Container:PlayerPreview(opts)
     end
     local outer = create("Frame", {
         Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 1, LayoutOrder = #parentList:GetChildren() + 1,
+        BackgroundTransparency = 1, LayoutOrder = opts.Order or 0,
     }, parentList)
     outer:SetAttribute("SearchName", "Player Preview")
     listLayout(outer, 0)
@@ -483,7 +483,7 @@ function Container:PlayerPreview(opts)
     corner(card, 6)
     stroke(card, "Accent", 0.3)
     label(card, "PREVIEW", 11, "Muted", true, { Position = UDim2.fromOffset(10, 8), Size = UDim2.fromOffset(70, 16) })
-    local nameL = label(card, "", 11, "Accent", false, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 8), Size = UDim2.fromOffset(120, 16), TextXAlignment = Enum.TextXAlignment.Right })
+    local nameL = label(card, "", 11, "Accent", false, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 8), Size = UDim2.fromOffset(95, 16), TextXAlignment = Enum.TextXAlignment.Right })
     nameL.Text = LocalPlayer.DisplayName or LocalPlayer.Name
 
     local characterArea = create("Frame", { Position = UDim2.fromOffset(10, 28), Size = UDim2.new(1, -20, 0, 148), BackgroundTransparency = 0.8 }, card)
@@ -497,7 +497,7 @@ function Container:PlayerPreview(opts)
     }, characterArea)
     corner(viewport, 4)
     local world = create("WorldModel", {}, viewport)
-    local camera = create("Camera", { FieldOfView = 30 }, viewport)
+    local camera = create("Camera", { FieldOfView = 30, CameraType = Enum.CameraType.Scriptable }, viewport)
     viewport.CurrentCamera = camera
 
     local healthL = label(characterArea, "100", 10, "Accent", false, { Position = UDim2.fromOffset(6, 6), Size = UDim2.fromOffset(40, 14), ZIndex = 2 })
@@ -516,6 +516,7 @@ function Container:PlayerPreview(opts)
         for _, d in ipairs(model:GetDescendants()) do
             if d:IsA("BasePart") then
                 d.Anchored = true; d.CanCollide = false; d.CanQuery = false; d.CanTouch = false
+                d.LocalTransparencyModifier = 0
             elseif d:IsA("Script") or d:IsA("LocalScript") or d:IsA("ModuleScript") then
                 d:Destroy()
             end
@@ -528,6 +529,16 @@ function Container:PlayerPreview(opts)
         local maxDim = math.max(size.X, size.Y, size.Z)
         local dist = (maxDim > 0 and maxDim or 6) * 2.2
         camera.CFrame = CFrame.lookAt(Vector3.new(0, 0, -dist), Vector3.new(0, 0, 0))
+        viewport.CurrentCamera = camera
+        -- Alguns jogos limpam o CurrentCamera / o render do viewport; reanexa no próximo frame.
+        local mounted = model
+        task.defer(function()
+            if mounted == model and mounted.Parent == world then
+                mounted.Parent = nil
+                mounted.Parent = world
+                viewport.CurrentCamera = camera
+            end
+        end)
         local hum = healthSource or model:FindFirstChildOfClass("Humanoid")
         if hum and hum.Parent then
             setHealth(hum.Health)
@@ -560,7 +571,10 @@ function Container:PlayerPreview(opts)
         local char = LocalPlayer.Character
         local hum = char and char:FindFirstChildOfClass("Humanoid")
         if hum then
+            local archivable = char.Archivable
+            char.Archivable = true
             local ok, clone = pcall(function() return char:Clone() end)
+            char.Archivable = archivable
             if ok and clone then
                 mount(clone, hum)
                 return
@@ -589,7 +603,7 @@ function Container:PlayerPreview(opts)
     for i, btnName in ipairs(buttons) do
         local state = false
         local btn = create("TextButton", {
-            Size = UDim2.fromScale(1, 1), Text = btnName, TextSize = 10, FontFace = Library.Fonts.Regular,
+            Size = UDim2.fromScale(1, 1), Text = btnName, TextSize = 9, FontFace = Library.Fonts.Regular,
             AutoButtonColor = false, BorderSizePixel = 0, LayoutOrder = i, BackgroundTransparency = 0.2,
         }, buttonRow)
         corner(btn, 3)
@@ -615,6 +629,7 @@ function Container:PlayerPreview(opts)
             if healthConn then healthConn:Disconnect() end
             return
         end
+        if viewport.CurrentCamera ~= camera then viewport.CurrentCamera = camera end
         if model then
             yaw += dt * 0.5
             model:PivotTo(CFrame.Angles(0, yaw, 0) * basePivot)
@@ -2580,6 +2595,23 @@ end
 -- Submenu padrão (ícone de ajustes ao lado do toggle)
 local function buildSettings(name)
     return function(p)
+        if name == "Jogador" then
+            -- Cria o preview só quando a engrenagem abre, já com o painel visível.
+            local built = false
+            local function ensure()
+                if built then return end
+                built = true
+                p:PlayerPreview({})
+            end
+            if p.Frame then
+                p.Frame:GetPropertyChangedSignal("Visible"):Connect(function()
+                    if p.Frame.Visible then ensure() end
+                end)
+                if p.Frame.Visible then ensure() end
+            else
+                ensure()
+            end
+        end
         p:Dropdown({ Name = "Modo", Options = { "Sempre", "Ao segurar", "Alternar" }, Default = "Alternar", Callback = function(v) end })
         p:Slider({ Name = "Intensidade", Min = 0, Max = 100, Default = 50, Suffix = "%", Callback = function(v) end })
         p:Slider({ Name = "Distância", Min = 10, Max = 1000, Default = 300, Suffix = "m", Callback = function(v) end })
@@ -2611,7 +2643,6 @@ end
 
 -- ---------------- VISUAIS ----------------
 local visuais = Window:Tab({ Name = "VISUAIS", Icon = "eye" })
-visuais:PlayerPreview({})
 local g = visuais:Groupbox({ Name = "ESP", Icon = "scan-eye", Side = "Left" })
 for _, n in ipairs({ "Jogador", "NPCs", "Corpo", "Recipiente", "Item no chão", "Itens de missão" }) do
     T(g, n, n == "Jogador" or n == "NPCs" or n == "Corpo")
