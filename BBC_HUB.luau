@@ -4301,7 +4301,9 @@ end
 -- ============ 30_actions.luau :: Lógica de movimento, mundo, extras, combate e servidores ============
 local buildProfile
 local Actions = {}
-do
+-- Inicialização isolada da função principal: o compilador do loadstring não
+-- precisa manter os locais dos módulos anteriores no mesmo quadro de registros.
+local function initializeActions()
     local Players = game:GetService("Players")
     local Workspace = game:GetService("Workspace")
     local RunService = game:GetService("RunService")
@@ -6477,420 +6479,425 @@ do
         if fx.built then attachLocalFx() end
     end
 
-    -- ---------- Persistência (executor com writefile) ----------
-    local FOLDER = "BBC_HUB"
-    local FILE = FOLDER .. "/perfil_" .. LP.UserId .. ".json"
-    local data = { kills = 0, deaths = 0, damage = 0, played = 0, runs = 0 }
-    local canFS = type(writefile) == "function" and type(readfile) == "function" and type(isfile) == "function"
-    if canFS then
-        pcall(function()
-            if type(isfolder) == "function" and type(makefolder) == "function" and not isfolder(FOLDER) then makefolder(FOLDER) end
-        end)
-        pcall(function()
-            if isfile(FILE) then
-                for k, v in pairs(HttpService:JSONDecode(readfile(FILE))) do data[k] = v end
-            end
-        end)
-    end
-    data.runs = (tonumber(data.runs) or 0) + 1
-    local function save()
-        if canFS then pcall(writefile, FILE, HttpService:JSONEncode(data)) end
-    end
-    save()
-
-    -- ---------- Rastreamento real ----------
-    local function hookCharacter(char)
-        local hum = char:WaitForChild("Humanoid", 10)
-        if not Actions.alive or LP.Character ~= char or not hum then return end
-        local last = hum.Health
-        Actions.trackConn(Actions.connect(hum.HealthChanged, function(h)
-            if h < last then data.damage += last - h end
-            last = h
-        end))
-        Actions.trackConn(Actions.connect(hum.Died, function()
-            data.deaths += 1
-            if MV.respawn then task.delay(Actions.getAdjustment("respawnDelay"), function() if Actions.alive and MV.respawn and not Library.Panic and LP.Character == char and hum.Health <= 0 then pcall(function() LP:LoadCharacter() end) end end) end
-        end))
-    end
-    if LP.Character then task.spawn(hookCharacter, LP.Character) end
-    Actions.trackConn(Actions.connect(LP.CharacterAdded, hookCharacter))
-
-    -- Abates por tag "creator" (jogos que usam essa convenção)
-    local function hookVictim(plr)
-        if plr == LP then return end
-        local charConn, addedConn, removingConn, ancestryConn
-        local function disconnectCharacter()
-            if charConn then charConn:Disconnect(); charConn = nil end
+    -- A Home conserva seu estado em closures próprias, sem ocupar os registros
+    -- usados pelo restante da inicialização das ações.
+    local function initializeProfile()
+        -- ---------- Persistência (executor com writefile) ----------
+        local FOLDER = "BBC_HUB"
+        local FILE = FOLDER .. "/perfil_" .. LP.UserId .. ".json"
+        local data = { kills = 0, deaths = 0, damage = 0, played = 0, runs = 0 }
+        local canFS = type(writefile) == "function" and type(readfile) == "function" and type(isfile) == "function"
+        if canFS then
+            pcall(function()
+                if type(isfolder) == "function" and type(makefolder) == "function" and not isfolder(FOLDER) then makefolder(FOLDER) end
+            end)
+            pcall(function()
+                if isfile(FILE) then
+                    for k, v in pairs(HttpService:JSONDecode(readfile(FILE))) do data[k] = v end
+                end
+            end)
         end
-        local function onChar(char)
+        data.runs = (tonumber(data.runs) or 0) + 1
+        local function save()
+            if canFS then pcall(writefile, FILE, HttpService:JSONEncode(data)) end
+        end
+        save()
+
+        -- ---------- Rastreamento real ----------
+        local function hookCharacter(char)
             local hum = char:WaitForChild("Humanoid", 10)
-            if not Actions.alive or plr.Parent ~= Players or plr.Character ~= char or not hum then return end
-            disconnectCharacter()
-            charConn = Actions.connect(hum.Died,  function()
-                local tag = hum:FindFirstChild("creator")
-                if tag and tag.Value == LP then data.kills += 1 end
+            if not Actions.alive or LP.Character ~= char or not hum then return end
+            local last = hum.Health
+            Actions.trackConn(Actions.connect(hum.HealthChanged, function(h)
+                if h < last then data.damage += last - h end
+                last = h
+            end))
+            Actions.trackConn(Actions.connect(hum.Died, function()
+                data.deaths += 1
+                if MV.respawn then task.delay(Actions.getAdjustment("respawnDelay"), function() if Actions.alive and MV.respawn and not Library.Panic and LP.Character == char and hum.Health <= 0 then pcall(function() LP:LoadCharacter() end) end end) end
+            end))
+        end
+        if LP.Character then task.spawn(hookCharacter, LP.Character) end
+        Actions.trackConn(Actions.connect(LP.CharacterAdded, hookCharacter))
+
+        -- Abates por tag "creator" (jogos que usam essa convenção)
+        local function hookVictim(plr)
+            if plr == LP then return end
+            local charConn, addedConn, removingConn, ancestryConn
+            local function disconnectCharacter()
+                if charConn then charConn:Disconnect(); charConn = nil end
+            end
+            local function onChar(char)
+                local hum = char:WaitForChild("Humanoid", 10)
+                if not Actions.alive or plr.Parent ~= Players or plr.Character ~= char or not hum then return end
+                disconnectCharacter()
+                charConn = Actions.connect(hum.Died,  function()
+                    local tag = hum:FindFirstChild("creator")
+                    if tag and tag.Value == LP then data.kills += 1 end
+                end)
+            end
+            if plr.Character then task.spawn(onChar, plr.Character) end
+            addedConn = Actions.connect(plr.CharacterAdded, onChar)
+            removingConn = Actions.connect(plr.CharacterRemoving, disconnectCharacter)
+            ancestryConn = Actions.connect(plr.AncestryChanged, function(_, parent)
+                if parent then return end
+                disconnectCharacter()
+                if addedConn then addedConn:Disconnect() end
+                if removingConn then removingConn:Disconnect() end
+                if ancestryConn then ancestryConn:Disconnect() end
             end)
         end
-        if plr.Character then task.spawn(onChar, plr.Character) end
-        addedConn = Actions.connect(plr.CharacterAdded, onChar)
-        removingConn = Actions.connect(plr.CharacterRemoving, disconnectCharacter)
-        ancestryConn = Actions.connect(plr.AncestryChanged, function(_, parent)
-            if parent then return end
-            disconnectCharacter()
-            if addedConn then addedConn:Disconnect() end
-            if removingConn then removingConn:Disconnect() end
-            if ancestryConn then ancestryConn:Disconnect() end
-        end)
-    end
-    for _, p in ipairs(Players:GetPlayers()) do hookVictim(p) end
-    Actions.trackConn(Actions.connect(Players.PlayerAdded, hookVictim))
+        for _, p in ipairs(Players:GetPlayers()) do hookVictim(p) end
+        Actions.trackConn(Actions.connect(Players.PlayerAdded, hookVictim))
 
-    local function leaderStat(patterns)
-        local ls = LP:FindFirstChild("leaderstats")
-        if not ls then return nil end
-        for _, v in ipairs(ls:GetChildren()) do
-            if v:IsA("ValueBase") then
-                local n = string.lower(v.Name)
-                for _, p in ipairs(patterns) do
-                    if string.find(n, p, 1, true) then return tonumber(v.Value) end
+        local function leaderStat(patterns)
+            local ls = LP:FindFirstChild("leaderstats")
+            if not ls then return nil end
+            for _, v in ipairs(ls:GetChildren()) do
+                if v:IsA("ValueBase") then
+                    local n = string.lower(v.Name)
+                    for _, p in ipairs(patterns) do
+                        if string.find(n, p, 1, true) then return tonumber(v.Value) end
+                    end
                 end
             end
+            return nil
         end
-        return nil
-    end
 
-    -- ---------- Leituras ----------
-    local function fmtDuration(sec, withSeconds)
-        sec = math.max(math.floor(sec), 0)
-        local d = math.floor(sec / 86400)
-        local h = math.floor(sec % 86400 / 3600)
-        local m = math.floor(sec % 3600 / 60)
-        local r = sec % 60
-        if d > 0 then return d .. "d " .. h .. "h" end
-        if h > 0 then return h .. "h " .. m .. "m" end
-        if withSeconds then return m .. "m " .. r .. "s" end
-        return m .. "m"
-    end
-    local function fmtBig(n)
-        n = tonumber(n) or 0
-        if n >= 1e6 then return string.format("%.1fM", n / 1e6) end
-        if n >= 1e3 then return string.format("%.1fK", n / 1e3) end
-        return tostring(math.floor(n))
-    end
-    local function getPing()
-        local ok, v = pcall(function() return StatsService.Network.ServerStatsItem["Data Ping"]:GetValue() end)
-        if ok and v then return math.floor(v) end
-        local ok2, p = pcall(function() return LP:GetNetworkPing() * 1000 end)
-        return ok2 and math.floor(p) or 0
-    end
-    local function getDevice()
-        local kb = UserInputService.KeyboardEnabled
-        if UserInputService.TouchEnabled and not kb then return tr("Celular") end
-        if UserInputService.GamepadEnabled and not kb then return tr("Console") end
-        return "PC"
-    end
-    local frames, fps = 0, 0
-    Actions.trackConn(Actions.connect(RunService.RenderStepped, function() frames += 1 end))
+        -- ---------- Leituras ----------
+        local function fmtDuration(sec, withSeconds)
+            sec = math.max(math.floor(sec), 0)
+            local d = math.floor(sec / 86400)
+            local h = math.floor(sec % 86400 / 3600)
+            local m = math.floor(sec % 3600 / 60)
+            local r = sec % 60
+            if d > 0 then return d .. "d " .. h .. "h" end
+            if h > 0 then return h .. "h " .. m .. "m" end
+            if withSeconds then return m .. "m " .. r .. "s" end
+            return m .. "m"
+        end
+        local function fmtBig(n)
+            n = tonumber(n) or 0
+            if n >= 1e6 then return string.format("%.1fM", n / 1e6) end
+            if n >= 1e3 then return string.format("%.1fK", n / 1e3) end
+            return tostring(math.floor(n))
+        end
+        local function getPing()
+            local ok, v = pcall(function() return StatsService.Network.ServerStatsItem["Data Ping"]:GetValue() end)
+            if ok and v then return math.floor(v) end
+            local ok2, p = pcall(function() return LP:GetNetworkPing() * 1000 end)
+            return ok2 and math.floor(p) or 0
+        end
+        local function getDevice()
+            local kb = UserInputService.KeyboardEnabled
+            if UserInputService.TouchEnabled and not kb then return tr("Celular") end
+            if UserInputService.GamepadEnabled and not kb then return tr("Console") end
+            return "PC"
+        end
+        local frames, fps = 0, 0
+        Actions.trackConn(Actions.connect(RunService.RenderStepped, function() frames += 1 end))
 
-    -- ---------- UI ----------
-    local themed = {}
-    local function th(inst, prop, key)
-        themed[#themed + 1] = { inst, prop, key }
-        inst[prop] = Library.Theme[key]
-    end
-    table.insert(Library._themeListeners, function()
-        for _, t in ipairs(themed) do
-            if t[1].Parent then t[1][t[2]] = Library.Theme[t[3]] end
+        -- ---------- UI ----------
+        local themed = {}
+        local function th(inst, prop, key)
+            themed[#themed + 1] = { inst, prop, key }
+            inst[prop] = Library.Theme[key]
         end
-    end)
-    local function mk(class, props, parent)
-        local i = Instance.new(class)
-        for k, v in pairs(props) do i[k] = v end
-        i.Parent = parent
-        return i
-    end
-    local function txt(parent, text, size, key, bold, extra)
-        local l = mk("TextLabel", {
-            BackgroundTransparency = 1, Text = text, TextSize = size,
-            FontFace = bold and Library.Fonts.Bold or Library.Fonts.Regular,
-            TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd,
-            Size = UDim2.new(1, 0, 0, size + 4),
-        }, parent)
-        th(l, "TextColor3", key or "Text")
-        for k, v in pairs(extra or {}) do l[k] = v end
-        return l
-    end
-    local function decorate(f, key, radius)
-        th(f, "BackgroundColor3", key)
-        f.BorderSizePixel = 0
-        mk("UICorner", { CornerRadius = UDim.new(0, radius or 8) }, f)
-        th(mk("UIStroke", {}, f), "Color", "Stroke")
-    end
-    local function box(parent, title, order, size)
-        local f = mk("Frame", { Size = size or UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = order }, parent)
-        decorate(f, "Surface2", 8)
-        mk("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 10) }, f)
-        mk("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, f)
-        local titleLabel = txt(f, string.upper(title), 12, "Muted", false, { LayoutOrder = 0 })
-        return f, titleLabel
-    end
-    local function grid(parent, cols, order)
-        local g = mk("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = order }, parent)
-        mk("UIGridLayout", {
-            CellPadding = UDim2.fromOffset(6, 6), CellSize = UDim2.new(1 / cols, -(6 * (cols - 1) / cols), 0, 46),
-            SortOrder = Enum.SortOrder.LayoutOrder,
-        }, g)
-        return g
-    end
-    local function cell(parent, title, order, big)
-        local c = mk("Frame", { LayoutOrder = order }, parent)
-        decorate(c, "Background", 6)
-        txt(c, title, 12, "Muted", false, { Position = UDim2.fromOffset(8, 3), Size = UDim2.new(1, -16, 0, 15) })
-        local v = txt(c, "…", big or 16, "Text", true, { Position = UDim2.fromOffset(8, 20), Size = UDim2.new(1, -16, 0, 22) })
-        return v, c
-    end
-    local function spark(parent)
-        local W, H, N = 56, 22, 20
-        local holder = mk("Frame", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -8, 0, 4), Size = UDim2.fromOffset(W, H), ClipsDescendants = true }, parent)
-        local segs, samples = {}, {}
-        for i = 1, N - 1 do
-            local sg = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), BorderSizePixel = 0, Size = UDim2.fromOffset(0, 2), Visible = false }, holder)
-            th(sg, "BackgroundColor3", "Accent")
-            segs[i] = sg
-        end
-        return function(v)
-            table.insert(samples, v)
-            if #samples > N then table.remove(samples, 1) end
-            local lo, hi = math.huge, -math.huge
-            for _, x in ipairs(samples) do lo = math.min(lo, x); hi = math.max(hi, x) end
-            if hi - lo < 1 then hi = lo + 1 end
-            local off, step, pts = N - #samples, W / (N - 1), {}
-            for i, x in ipairs(samples) do
-                pts[i] = Vector2.new((off + i - 1) * step, H - 2 - ((x - lo) / (hi - lo)) * (H - 4))
+        table.insert(Library._themeListeners, function()
+            for _, t in ipairs(themed) do
+                if t[1].Parent then t[1][t[2]] = Library.Theme[t[3]] end
             end
+        end)
+        local function mk(class, props, parent)
+            local i = Instance.new(class)
+            for k, v in pairs(props) do i[k] = v end
+            i.Parent = parent
+            return i
+        end
+        local function txt(parent, text, size, key, bold, extra)
+            local l = mk("TextLabel", {
+                BackgroundTransparency = 1, Text = text, TextSize = size,
+                FontFace = bold and Library.Fonts.Bold or Library.Fonts.Regular,
+                TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd,
+                Size = UDim2.new(1, 0, 0, size + 4),
+            }, parent)
+            th(l, "TextColor3", key or "Text")
+            for k, v in pairs(extra or {}) do l[k] = v end
+            return l
+        end
+        local function decorate(f, key, radius)
+            th(f, "BackgroundColor3", key)
+            f.BorderSizePixel = 0
+            mk("UICorner", { CornerRadius = UDim.new(0, radius or 8) }, f)
+            th(mk("UIStroke", {}, f), "Color", "Stroke")
+        end
+        local function box(parent, title, order, size)
+            local f = mk("Frame", { Size = size or UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = order }, parent)
+            decorate(f, "Surface2", 8)
+            mk("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 10) }, f)
+            mk("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, f)
+            local titleLabel = txt(f, string.upper(title), 12, "Muted", false, { LayoutOrder = 0 })
+            return f, titleLabel
+        end
+        local function grid(parent, cols, order)
+            local g = mk("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = order }, parent)
+            mk("UIGridLayout", {
+                CellPadding = UDim2.fromOffset(6, 6), CellSize = UDim2.new(1 / cols, -(6 * (cols - 1) / cols), 0, 46),
+                SortOrder = Enum.SortOrder.LayoutOrder,
+            }, g)
+            return g
+        end
+        local function cell(parent, title, order, big)
+            local c = mk("Frame", { LayoutOrder = order }, parent)
+            decorate(c, "Background", 6)
+            txt(c, title, 12, "Muted", false, { Position = UDim2.fromOffset(8, 3), Size = UDim2.new(1, -16, 0, 15) })
+            local v = txt(c, "…", big or 16, "Text", true, { Position = UDim2.fromOffset(8, 20), Size = UDim2.new(1, -16, 0, 22) })
+            return v, c
+        end
+        local function spark(parent)
+            local W, H, N = 56, 22, 20
+            local holder = mk("Frame", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -8, 0, 4), Size = UDim2.fromOffset(W, H), ClipsDescendants = true }, parent)
+            local segs, samples = {}, {}
             for i = 1, N - 1 do
-                local a, b = pts[i - off], pts[i - off + 1]
-                local sg = segs[i]
-                if a and b then
-                    local d = b - a
-                    sg.Visible = true
-                    sg.Size = UDim2.fromOffset(d.Magnitude + 1, 2)
-                    sg.Position = UDim2.fromOffset((a.X + b.X) / 2, (a.Y + b.Y) / 2)
-                    sg.Rotation = math.deg(math.atan2(d.Y, d.X))
-                else
-                    sg.Visible = false
+                local sg = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), BorderSizePixel = 0, Size = UDim2.fromOffset(0, 2), Visible = false }, holder)
+                th(sg, "BackgroundColor3", "Accent")
+                segs[i] = sg
+            end
+            return function(v)
+                table.insert(samples, v)
+                if #samples > N then table.remove(samples, 1) end
+                local lo, hi = math.huge, -math.huge
+                for _, x in ipairs(samples) do lo = math.min(lo, x); hi = math.max(hi, x) end
+                if hi - lo < 1 then hi = lo + 1 end
+                local off, step, pts = N - #samples, W / (N - 1), {}
+                for i, x in ipairs(samples) do
+                    pts[i] = Vector2.new((off + i - 1) * step, H - 2 - ((x - lo) / (hi - lo)) * (H - 4))
+                end
+                for i = 1, N - 1 do
+                    local a, b = pts[i - off], pts[i - off + 1]
+                    local sg = segs[i]
+                    if a and b then
+                        local d = b - a
+                        sg.Visible = true
+                        sg.Size = UDim2.fromOffset(d.Magnitude + 1, 2)
+                        sg.Position = UDim2.fromOffset((a.X + b.X) / 2, (a.Y + b.Y) / 2)
+                        sg.Rotation = math.deg(math.atan2(d.Y, d.X))
+                    else
+                        sg.Visible = false
+                    end
                 end
             end
         end
-    end
 
-    buildProfile = function(win, page, list)
-        local root = mk("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 1 }, list)
-        mk("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }, root)
+        buildProfile = function(win, page, list)
+            local root = mk("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 1 }, list)
+            mk("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }, root)
 
-        -- Identidade
-        local idc = mk("Frame", { Size = UDim2.new(1, 0, 0, 78), LayoutOrder = 1 }, root)
-        decorate(idc, "Surface2", 8)
-        local avatar = mk("ImageLabel", { Position = UDim2.fromOffset(10, 9), Size = UDim2.fromOffset(60, 60), BackgroundTransparency = 0, BorderSizePixel = 0, ScaleType = Enum.ScaleType.Crop }, idc)
-        th(avatar, "BackgroundColor3", "Surface3")
-        mk("UICorner", { CornerRadius = UDim.new(0, 6) }, avatar)
-        local thumb
-        task.spawn(function()
-            local ok, img = pcall(function()
-                return Players:GetUserThumbnailAsync(LP.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+            -- Identidade
+            local idc = mk("Frame", { Size = UDim2.new(1, 0, 0, 78), LayoutOrder = 1 }, root)
+            decorate(idc, "Surface2", 8)
+            local avatar = mk("ImageLabel", { Position = UDim2.fromOffset(10, 9), Size = UDim2.fromOffset(60, 60), BackgroundTransparency = 0, BorderSizePixel = 0, ScaleType = Enum.ScaleType.Crop }, idc)
+            th(avatar, "BackgroundColor3", "Surface3")
+            mk("UICorner", { CornerRadius = UDim.new(0, 6) }, avatar)
+            local thumb
+            task.spawn(function()
+                local ok, img = pcall(function()
+                    return Players:GetUserThumbnailAsync(LP.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+                end)
+                if ok and Actions.alive and avatar.Parent then thumb = img; avatar.Image = img end
             end)
-            if ok and Actions.alive and avatar.Parent then thumb = img; avatar.Image = img end
-        end)
-        local nameL = txt(idc, LP.DisplayName, 20, "Text", true, { Position = UDim2.fromOffset(82, 12), Size = UDim2.new(1, -230, 0, 26) })
-        local userL = txt(idc, "@" .. LP.Name, 15, "Muted", false, { Position = UDim2.fromOffset(82, 42), Size = UDim2.new(1, -230, 0, 20) })
-        local badge = mk("TextLabel", {
-            AnchorPoint = Vector2.new(0, 0), Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(46, 20),
-            BackgroundTransparency = 0.6, Text = ACCESS, TextSize = 12, FontFace = Library.Fonts.Bold,
-        }, idc)
-        decorate(badge, "Surface3", 4); th(badge, "TextColor3", "Text")
-        local function placeBadge()
-            badge.Position = UDim2.fromOffset(82 + nameL.TextBounds.X + 8, 15)
-        end
-        Actions.trackConn(Actions.connect(nameL:GetPropertyChangedSignal("TextBounds"), placeBadge)); placeBadge()
-        local hidden = false
-        local spy = mk("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(44, 44), Text = "OCULTAR", TextSize = 9, AutoButtonColor = false, FontFace = Library.Fonts.Bold }, idc)
-        decorate(spy, "Background", 6); th(spy, "TextColor3", "Text")
-        Actions.trackConn(Actions.connect(spy.MouseButton1Click, function()
-            hidden = not hidden
-            pcall(function() win:SetHideName(hidden); win:SetHideAvatar(hidden) end)
-            nameL.Text = hidden and "••••••" or LP.DisplayName
-            userL.Text = hidden and "@••••••" or ("@" .. LP.Name)
-            avatar.Image = hidden and "" or (thumb or "")
-            th(spy, "TextColor3", hidden and "Accent" or "Text")
-        end))
-
-        -- Estatísticas
-        local st = box(root, "Estatísticas", 2)
-        local sg = grid(st, 4, 1)
-        local vKills = cell(sg, "Abates", 1, 15)
-        local vDeaths = cell(sg, "Mortes", 2, 15)
-        local vPlayed = cell(sg, "Tempo jogado", 3, 15)
-        local vDmg = cell(sg, "Dano recebido", 4, 15)
-
-        -- Sessão e Conta lado a lado
-        local row = mk("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 3 }, root)
-        mk("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }, row)
-        local ses = box(row, "Sessão", 1, UDim2.new(0.5, -5, 0, 0))
-        local acc = box(row, "Conta", 2, UDim2.new(0.5, -5, 0, 0))
-        local sgrid, agrid = grid(ses, 2, 1), grid(acc, 2, 1)
-        local vFps, fpsCell = cell(sgrid, "FPS", 1)
-        local vPing, pingCell = cell(sgrid, "Ping", 2)
-        local vSess = cell(sgrid, "Tempo da sessão", 3)
-        local vPlayers = cell(sgrid, "Jogadores", 4)
-        local vDev = cell(sgrid, "Dispositivo", 5)
-        local vRes = cell(sgrid, "Resolução", 6)
-        local pushFps, pushPing = spark(fpsCell), spark(pingCell)
-        local vAge = cell(agrid, "Idade da conta", 1)
-        local vUid = cell(agrid, "ID do usuário", 2)
-        local vRuns = cell(agrid, "Execuções", 3)
-        local vAccess = cell(agrid, "Acesso", 4)
-        local vLeft = cell(agrid, "Tempo restante", 5)
-        local vVer = cell(agrid, "Versão do script", 6)
-
-        -- Servidores
-        local sv = box(root, "Servidores", 4)
-        local svg = grid(sv, 3, 1)
-        local vMap = cell(svg, "ID do mapa", 1)
-        local vMapVer = cell(svg, "Versão do mapa", 2)
-        local vJob = cell(svg, "ID do servidor", 3, 14)
-
-        -- Acesso rápido é apenas navegação: não ativa uma função ao abrir.
-        do
-            local favorites = box(root, "Favoritos", 5)
-            local description = txt(favorites, tr("Segure uma opção e toque em Favoritar."), 12, "Muted", false, { LayoutOrder = 1, Size = UDim2.new(1, 0, 0, 20) })
-            local current = txt(favorites, "", 12, "Muted", false, { LayoutOrder = 2, Size = UDim2.new(1, 0, 0, 20) })
-            local slots = {}
-            for i = 1, Library.Favorites.MAX do
-                local b = mk("TextButton", { Size = UDim2.new(1, 0, 0, 32), LayoutOrder = i + 2, Visible = false,
-                    Text = "", TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd,
-                    AutoButtonColor = false, FontFace = Library.Fonts.Regular }, favorites)
-                decorate(b, "Background", 4); th(b, "TextColor3", "Text")
-                local padding = mk("UIPadding", {}, b); padding.PaddingLeft = UDim.new(0, 8); padding.PaddingRight = UDim.new(0, 8)
-                local slot = { button = b }; slots[i] = slot
-                Actions.connect(b.MouseButton1Click, function() if slot.key then win:OpenFavorite(slot.key) end end)
+            local nameL = txt(idc, LP.DisplayName, 20, "Text", true, { Position = UDim2.fromOffset(82, 12), Size = UDim2.new(1, -230, 0, 26) })
+            local userL = txt(idc, "@" .. LP.Name, 15, "Muted", false, { Position = UDim2.fromOffset(82, 42), Size = UDim2.new(1, -230, 0, 20) })
+            local badge = mk("TextLabel", {
+                AnchorPoint = Vector2.new(0, 0), Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(46, 20),
+                BackgroundTransparency = 0.6, Text = ACCESS, TextSize = 12, FontFace = Library.Fonts.Bold,
+            }, idc)
+            decorate(badge, "Surface3", 4); th(badge, "TextColor3", "Text")
+            local function placeBadge()
+                badge.Position = UDim2.fromOffset(82 + nameL.TextBounds.X + 8, 15)
             end
-            local function renderFavorites()
-                if not root.Parent then return end
-                local items = Library.Favorites:get()
-                description.Visible = #items == 0
-                description.Text = tr("Segure uma opção e toque em Favoritar.")
-                current.Text = tr("Configuração ativa") .. ": " .. (win._cfgName or "—")
-                for i, slot in ipairs(slots) do
-                    local key = items[i]
-                    slot.key, slot.button.Visible = key, key ~= nil
-                    if key then
-                        local labelText = key
-                        for _, d in ipairs(win._search or {}) do
-                            if d.Parent and d:GetAttribute("SearchKey") == key and d:GetAttribute("SearchKind") == "Toggle" then
-                                labelText = tr(d:GetAttribute("SearchTab") or "") .. " · " .. tr(d:GetAttribute("SearchName") or "")
-                                break
+            Actions.trackConn(Actions.connect(nameL:GetPropertyChangedSignal("TextBounds"), placeBadge)); placeBadge()
+            local hidden = false
+            local spy = mk("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(44, 44), Text = "OCULTAR", TextSize = 9, AutoButtonColor = false, FontFace = Library.Fonts.Bold }, idc)
+            decorate(spy, "Background", 6); th(spy, "TextColor3", "Text")
+            Actions.trackConn(Actions.connect(spy.MouseButton1Click, function()
+                hidden = not hidden
+                pcall(function() win:SetHideName(hidden); win:SetHideAvatar(hidden) end)
+                nameL.Text = hidden and "••••••" or LP.DisplayName
+                userL.Text = hidden and "@••••••" or ("@" .. LP.Name)
+                avatar.Image = hidden and "" or (thumb or "")
+                th(spy, "TextColor3", hidden and "Accent" or "Text")
+            end))
+
+            -- Estatísticas
+            local st = box(root, "Estatísticas", 2)
+            local sg = grid(st, 4, 1)
+            local vKills = cell(sg, "Abates", 1, 15)
+            local vDeaths = cell(sg, "Mortes", 2, 15)
+            local vPlayed = cell(sg, "Tempo jogado", 3, 15)
+            local vDmg = cell(sg, "Dano recebido", 4, 15)
+
+            -- Sessão e Conta lado a lado
+            local row = mk("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 3 }, root)
+            mk("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }, row)
+            local ses = box(row, "Sessão", 1, UDim2.new(0.5, -5, 0, 0))
+            local acc = box(row, "Conta", 2, UDim2.new(0.5, -5, 0, 0))
+            local sgrid, agrid = grid(ses, 2, 1), grid(acc, 2, 1)
+            local vFps, fpsCell = cell(sgrid, "FPS", 1)
+            local vPing, pingCell = cell(sgrid, "Ping", 2)
+            local vSess = cell(sgrid, "Tempo da sessão", 3)
+            local vPlayers = cell(sgrid, "Jogadores", 4)
+            local vDev = cell(sgrid, "Dispositivo", 5)
+            local vRes = cell(sgrid, "Resolução", 6)
+            local pushFps, pushPing = spark(fpsCell), spark(pingCell)
+            local vAge = cell(agrid, "Idade da conta", 1)
+            local vUid = cell(agrid, "ID do usuário", 2)
+            local vRuns = cell(agrid, "Execuções", 3)
+            local vAccess = cell(agrid, "Acesso", 4)
+            local vLeft = cell(agrid, "Tempo restante", 5)
+            local vVer = cell(agrid, "Versão do script", 6)
+
+            -- Servidores
+            local sv = box(root, "Servidores", 4)
+            local svg = grid(sv, 3, 1)
+            local vMap = cell(svg, "ID do mapa", 1)
+            local vMapVer = cell(svg, "Versão do mapa", 2)
+            local vJob = cell(svg, "ID do servidor", 3, 14)
+
+            -- Acesso rápido é apenas navegação: não ativa uma função ao abrir.
+            do
+                local favorites = box(root, "Favoritos", 5)
+                local description = txt(favorites, tr("Segure uma opção e toque em Favoritar."), 12, "Muted", false, { LayoutOrder = 1, Size = UDim2.new(1, 0, 0, 20) })
+                local current = txt(favorites, "", 12, "Muted", false, { LayoutOrder = 2, Size = UDim2.new(1, 0, 0, 20) })
+                local slots = {}
+                for i = 1, Library.Favorites.MAX do
+                    local b = mk("TextButton", { Size = UDim2.new(1, 0, 0, 32), LayoutOrder = i + 2, Visible = false,
+                        Text = "", TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd,
+                        AutoButtonColor = false, FontFace = Library.Fonts.Regular }, favorites)
+                    decorate(b, "Background", 4); th(b, "TextColor3", "Text")
+                    local padding = mk("UIPadding", {}, b); padding.PaddingLeft = UDim.new(0, 8); padding.PaddingRight = UDim.new(0, 8)
+                    local slot = { button = b }; slots[i] = slot
+                    Actions.connect(b.MouseButton1Click, function() if slot.key then win:OpenFavorite(slot.key) end end)
+                end
+                local function renderFavorites()
+                    if not root.Parent then return end
+                    local items = Library.Favorites:get()
+                    description.Visible = #items == 0
+                    description.Text = tr("Segure uma opção e toque em Favoritar.")
+                    current.Text = tr("Configuração ativa") .. ": " .. (win._cfgName or "—")
+                    for i, slot in ipairs(slots) do
+                        local key = items[i]
+                        slot.key, slot.button.Visible = key, key ~= nil
+                        if key then
+                            local labelText = key
+                            for _, d in ipairs(win._search or {}) do
+                                if d.Parent and d:GetAttribute("SearchKey") == key and d:GetAttribute("SearchKind") == "Toggle" then
+                                    labelText = tr(d:GetAttribute("SearchTab") or "") .. " · " .. tr(d:GetAttribute("SearchName") or "")
+                                    break
+                                end
                             end
+                            slot.button.Text = labelText
                         end
-                        slot.button.Text = labelText
                     end
                 end
+                win._refreshHomeFavorites = renderFavorites
+                table.insert(Library.Favorites.listeners, renderFavorites)
+                table.insert(onLanguageChanged, renderFavorites)
+                renderFavorites()
             end
-            win._refreshHomeFavorites = renderFavorites
-            table.insert(Library.Favorites.listeners, renderFavorites)
-            table.insert(onLanguageChanged, renderFavorites)
-            renderFavorites()
-        end
-        do
-            local recent, title = box(root, tr("Recentes nesta sessão"), 6)
-            local empty = txt(recent, tr("Navegue pela busca ou favoritos para ver opções recentes."), 12, "Muted", false,
-                { LayoutOrder = 1, Size = UDim2.new(1, 0, 0, 20) })
-            local slots = {}
-            for i = 1, Library.RecentNavigation.MAX do
-                local b = mk("TextButton", { Size = UDim2.new(1, 0, 0, 32), LayoutOrder = i + 1, Visible = false,
-                    Text = "", TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd,
-                    AutoButtonColor = false, FontFace = Library.Fonts.Regular }, recent)
-                decorate(b, "Background", 4); th(b, "TextColor3", "Text")
-                local padding = mk("UIPadding", {}, b); padding.PaddingLeft = UDim.new(0, 8); padding.PaddingRight = UDim.new(0, 8)
-                local slot = { button = b }; slots[i] = slot
-                Actions.connect(b.MouseButton1Click, function() if slot.key then win:OpenFavorite(slot.key) end end)
-            end
-            local function renderRecent()
-                if not root.Parent then return end
-                local items = Library.RecentNavigation:get()
-                title.Text = string.upper(tr("Recentes nesta sessão"))
-                empty.Visible = #items == 0
-                empty.Text = tr("Navegue pela busca ou favoritos para ver opções recentes.")
-                for i, slot in ipairs(slots) do
-                    local key = items[i]
-                    slot.key, slot.button.Visible = key, key ~= nil
-                    if key then
-                        local text = key
-                        for _, d in ipairs(win._search or {}) do
-                            if d.Parent and d:GetAttribute("SearchKey") == key and d:GetAttribute("SearchKind") == "Toggle" then
-                                text = tr(d:GetAttribute("SearchTab") or "") .. " · " .. tr(d:GetAttribute("SearchName") or ""); break
+            do
+                local recent, title = box(root, tr("Recentes nesta sessão"), 6)
+                local empty = txt(recent, tr("Navegue pela busca ou favoritos para ver opções recentes."), 12, "Muted", false,
+                    { LayoutOrder = 1, Size = UDim2.new(1, 0, 0, 20) })
+                local slots = {}
+                for i = 1, Library.RecentNavigation.MAX do
+                    local b = mk("TextButton", { Size = UDim2.new(1, 0, 0, 32), LayoutOrder = i + 1, Visible = false,
+                        Text = "", TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd,
+                        AutoButtonColor = false, FontFace = Library.Fonts.Regular }, recent)
+                    decorate(b, "Background", 4); th(b, "TextColor3", "Text")
+                    local padding = mk("UIPadding", {}, b); padding.PaddingLeft = UDim.new(0, 8); padding.PaddingRight = UDim.new(0, 8)
+                    local slot = { button = b }; slots[i] = slot
+                    Actions.connect(b.MouseButton1Click, function() if slot.key then win:OpenFavorite(slot.key) end end)
+                end
+                local function renderRecent()
+                    if not root.Parent then return end
+                    local items = Library.RecentNavigation:get()
+                    title.Text = string.upper(tr("Recentes nesta sessão"))
+                    empty.Visible = #items == 0
+                    empty.Text = tr("Navegue pela busca ou favoritos para ver opções recentes.")
+                    for i, slot in ipairs(slots) do
+                        local key = items[i]
+                        slot.key, slot.button.Visible = key, key ~= nil
+                        if key then
+                            local text = key
+                            for _, d in ipairs(win._search or {}) do
+                                if d.Parent and d:GetAttribute("SearchKey") == key and d:GetAttribute("SearchKind") == "Toggle" then
+                                    text = tr(d:GetAttribute("SearchTab") or "") .. " · " .. tr(d:GetAttribute("SearchName") or ""); break
+                                end
                             end
+                            slot.button.Text = text
                         end
-                        slot.button.Text = text
                     end
                 end
+                table.insert(Library.RecentNavigation.listeners, renderRecent)
+                table.insert(onLanguageChanged, renderRecent)
+                renderRecent()
             end
-            table.insert(Library.RecentNavigation.listeners, renderRecent)
-            table.insert(onLanguageChanged, renderRecent)
-            renderRecent()
-        end
 
-        -- Valores estáticos (reais)
-        vUid.Text = tostring(LP.UserId)
-        vAge.Text = LP.AccountAge .. " " .. tr("dias")
-        vAccess.Text = ACCESS
-        vVer.Text = VERSION
-        vDev.Text = getDevice()
-        table.insert(onLanguageChanged, function() vDev.Text = getDevice(); vAge.Text = LP.AccountAge .. " " .. tr("dias") end)
-        vMap.Text = tostring(game.PlaceId)
-        vMapVer.Text = tostring(game.PlaceVersion)
-        vJob.Text = (game.JobId ~= "" and game.JobId) or tr("Servidor local")
-        vRuns.Text = tostring(data.runs)
+            -- Valores estáticos (reais)
+            vUid.Text = tostring(LP.UserId)
+            vAge.Text = LP.AccountAge .. " " .. tr("dias")
+            vAccess.Text = ACCESS
+            vVer.Text = VERSION
+            vDev.Text = getDevice()
+            table.insert(onLanguageChanged, function() vDev.Text = getDevice(); vAge.Text = LP.AccountAge .. " " .. tr("dias") end)
+            vMap.Text = tostring(game.PlaceId)
+            vMapVer.Text = tostring(game.PlaceVersion)
+            vJob.Text = (game.JobId ~= "" and game.JobId) or tr("Servidor local")
+            vRuns.Text = tostring(data.runs)
 
-        local started, lastSave, lastTick = os.clock(), os.clock(), os.clock()
-        local function refresh()
-            local now = os.clock()
-            data.played += now - lastTick
-            lastTick = now
-            fps = frames; frames = 0
-            local ping = getPing()
-            vFps.Text = tostring(fps); pushFps(fps)
-            vPing.Text = ping .. " ms"; pushPing(ping)
-            vFps.TextColor3 = fps >= 50 and Library.Theme.Text or (fps >= 30 and Library.Theme.Warning or Library.Theme.Error)
-            vPing.TextColor3 = ping <= 90 and Library.Theme.Text or (ping <= 180 and Library.Theme.Warning or Library.Theme.Error)
-            vSess.Text = fmtDuration(now - started, true)
-            vPlayers.Text = #Players:GetPlayers() .. " / " .. Players.MaxPlayers
-            local cam = workspace.CurrentCamera
-            if cam then vRes.Text = math.floor(cam.ViewportSize.X) .. " x " .. math.floor(cam.ViewportSize.Y) end
-            local kills = leaderStat({ "kill", "abate", "elimin" }) or data.kills
-            local deaths = leaderStat({ "death", "morte", "died" }) or data.deaths
-            vKills.Text = tostring(kills)
-            vDeaths.Text = tostring(deaths)
-            vPlayed.Text = fmtDuration(data.played)
-            vDmg.Text = fmtBig(data.damage)
-            local expiry = Config.Expiry
-            if type(expiry) == "function" then local ok, r = pcall(expiry); expiry = ok and r or nil end
-            if type(expiry) == "number" then
-                local left = expiry - os.time()
-                vLeft.Text = left > 0 and fmtDuration(left) or tr("Expirado")
-            else
-                vLeft.Text = tr("Ilimitado")
+            local started, lastSave, lastTick = os.clock(), os.clock(), os.clock()
+            local function refresh()
+                local now = os.clock()
+                data.played += now - lastTick
+                lastTick = now
+                fps = frames; frames = 0
+                local ping = getPing()
+                vFps.Text = tostring(fps); pushFps(fps)
+                vPing.Text = ping .. " ms"; pushPing(ping)
+                vFps.TextColor3 = fps >= 50 and Library.Theme.Text or (fps >= 30 and Library.Theme.Warning or Library.Theme.Error)
+                vPing.TextColor3 = ping <= 90 and Library.Theme.Text or (ping <= 180 and Library.Theme.Warning or Library.Theme.Error)
+                vSess.Text = fmtDuration(now - started, true)
+                vPlayers.Text = #Players:GetPlayers() .. " / " .. Players.MaxPlayers
+                local cam = workspace.CurrentCamera
+                if cam then vRes.Text = math.floor(cam.ViewportSize.X) .. " x " .. math.floor(cam.ViewportSize.Y) end
+                local kills = leaderStat({ "kill", "abate", "elimin" }) or data.kills
+                local deaths = leaderStat({ "death", "morte", "died" }) or data.deaths
+                vKills.Text = tostring(kills)
+                vDeaths.Text = tostring(deaths)
+                vPlayed.Text = fmtDuration(data.played)
+                vDmg.Text = fmtBig(data.damage)
+                local expiry = Config.Expiry
+                if type(expiry) == "function" then local ok, r = pcall(expiry); expiry = ok and r or nil end
+                if type(expiry) == "number" then
+                    local left = expiry - os.time()
+                    vLeft.Text = left > 0 and fmtDuration(left) or tr("Expirado")
+                else
+                    vLeft.Text = tr("Ilimitado")
+                end
+                if now - lastSave >= 30 then lastSave = now; save() end
             end
-            if now - lastSave >= 30 then lastSave = now; save() end
+            refresh()
+            task.spawn(function()
+                while Actions.alive and list.Parent do
+                    task.wait(1)
+                    if Actions.alive and list.Parent then pcall(refresh) end
+                end
+            end)
+            Actions.trackConn(Actions.connect(Players.PlayerRemoving, function(p) if p == LP then save() end end))
         end
-        refresh()
-        task.spawn(function()
-            while Actions.alive and list.Parent do
-                task.wait(1)
-                if Actions.alive and list.Parent then pcall(refresh) end
-            end
-        end)
-        Actions.trackConn(Actions.connect(Players.PlayerRemoving, function(p) if p == LP then save() end end))
     end
+    initializeProfile()
 
     -- Expor somente as referências utilizadas pelos módulos seguintes; os locais
     -- acima pertencem ao bloco e não ficam disponíveis fora dele automaticamente.
@@ -7011,6 +7018,7 @@ do
         Actions.restoreWalk(); Actions.restoreSwim()
     end)
 end
+initializeActions()
 
 
 -- ============================================================
