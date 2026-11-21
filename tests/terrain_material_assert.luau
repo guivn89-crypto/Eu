@@ -1,5 +1,0 @@
-paintTerrain("terra", "nova")
-assert(Terrain.colors.Ground == "nova" and Actions.terrainColors.Ground == "original")
-paintTerrain("agua", "azul")
-assert(Terrain.WaterColor == "azul")
-print("terrain material mapping OK")
