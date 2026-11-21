@@ -1,5 +1,6 @@
 """Verificações estáticas do artefato; não substituem testes no Roblox."""
 import importlib.util
+import json
 import os
 import re
 from pathlib import Path
@@ -17,6 +18,92 @@ class BuildTests(unittest.TestCase):
         spec.loader.exec_module(build)
         expected = build.HEADER + ''.join((ROOT / 'src' / name).read_text(encoding='utf-8') for name in build.MODULES)
         self.assertEqual((ROOT / 'BBC_HUB.luau').read_text(encoding='utf-8'), expected)
+
+    def test_direct_roblox_enums_and_instance_classes_against_snapshot(self):
+        # Snapshot parcial de API versionada; não cobre nomes dinâmicos ou runtime.
+        snapshot = json.loads((ROOT / 'tests' / 'roblox_api_snapshot.json').read_text(encoding='utf-8'))
+        for path in sorted((ROOT / 'src').glob('*.luau')):
+            for line_no, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+                for category, item in re.findall(r'\bEnum\.([A-Za-z_]\w*)\.([A-Za-z_]\w*)', line):
+                    self.assertIn(category, snapshot['enums'], f'{path.name}:{line_no}')
+                    self.assertIn(item, snapshot['enums'][category], f'{path.name}:{line_no} Enum.{category}.{item}')
+                for class_name in re.findall(r"\b(?:Instance\.new|create|mk|mkFx|new)\(\s*[\"']([A-Za-z][A-Za-z0-9_]*)[\"']", line):
+                    self.assertIn(class_name, snapshot['constructible_classes'], f'{path.name}:{line_no}')
+
+    def test_environment_effect_property_contract(self):
+        snapshot = json.loads((ROOT / 'tests' / 'roblox_api_snapshot.json').read_text(encoding='utf-8'))
+        for name in ('Cover', 'Enabled'):
+            self.assertIn(name, snapshot['properties']['Clouds'])
+        self.assertNotIn('Enabled', snapshot['properties']['Atmosphere'])
+        self.assertNotIn('Enabled', snapshot['properties']['Sky'])
+
+    def test_literal_gui_constructor_properties_against_snapshot(self):
+        # Examina nomes literais no primeiro nível das tabelas de propriedades.
+        # Não interpreta nomes calculados, setters posteriores ou chamadas dinâmicas.
+        snapshot = json.loads((ROOT / 'tests' / 'roblox_api_snapshot.json').read_text(encoding='utf-8'))
+        tokens = re.compile(r"""--\[(=*)\[.*?\]\1\]|--[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\[(=*)\[.*?\]\2\]|[A-Za-z_]\w*|==|~=|<=|>=|[^\s]""", re.S)
+        for path in sorted((ROOT / 'src').glob('*.luau')):
+            text = path.read_text(encoding='utf-8')
+            ts = [(m.group(), m.start()) for m in tokens.finditer(text) if not m.group().startswith('--')]
+            for i, (token, _) in enumerate(ts):
+                if token not in ('create', 'mk', 'new') or i + 4 >= len(ts):
+                    continue
+                if ts[i+1][0] != '(' or ts[i+3][0] != ',' or ts[i+4][0] != '{':
+                    continue
+                literal = ts[i+2][0]
+                if not literal.startswith(('"', "'")):
+                    continue
+                class_name = literal[1:-1]
+                self.assertIn(class_name, snapshot['properties'], path.name)
+                depth, k = 1, i + 5
+                while k < len(ts) and depth:
+                    word, pos = ts[k]
+                    if word == '{': depth += 1
+                    elif word == '}': depth -= 1
+                    elif depth == 1 and re.fullmatch(r'[A-Za-z_]\w*', word) and k + 1 < len(ts) and ts[k+1][0] == '=':
+                        self.assertIn(word, snapshot['properties'][class_name],
+                                      f'{path.name}:{text.count(chr(10), 0, pos)+1} {class_name}.{word}')
+                    k += 1
+
+    def test_terrain_material_mapping_with_luau_if_available(self):
+        runner = os.environ.get('LUAU_BIN')
+        if not runner:
+            self.skipTest('Defina LUAU_BIN para executar os testes de Luau.')
+        actions = (ROOT / 'src' / '30_actions.luau').read_text(encoding='utf-8')
+        helper = actions[actions.index('    local TERRAIN_MATS ='):actions.index('    -- folhas / troncos')]
+        setup = (ROOT / 'tests' / 'terrain_material_spec.luau').read_text(encoding='utf-8')
+        spec = (ROOT / 'tests' / 'terrain_material_assert.luau').read_text(encoding='utf-8')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'terrain.luau'
+            path.write_text(setup + helper + spec, encoding='utf-8')
+            subprocess.run([runner, str(path)], check=True, capture_output=True, text=True)
+
+    def test_effects_created_disabled_with_luau_if_available(self):
+        runner = os.environ.get('LUAU_BIN')
+        if not runner:
+            self.skipTest('Defina LUAU_BIN para executar os testes de Luau.')
+        source = (ROOT / 'src' / '30_actions.luau').read_text(encoding='utf-8')
+        helper = source[source.index('    local FX = {}'):source.index('    -- Reutiliza as nuvens do jogo')]
+        setup = (ROOT / 'tests' / 'effect_init_spec.luau').read_text(encoding='utf-8')
+        spec = (ROOT / 'tests' / 'effect_init_assert.luau').read_text(encoding='utf-8')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'effect_init.luau'
+            path.write_text(setup + helper + spec, encoding='utf-8')
+            subprocess.run([runner, str(path)], check=True, capture_output=True, text=True)
+
+    def test_cloud_reuse_and_restoration_with_luau_if_available(self):
+        runner = os.environ.get('LUAU_BIN')
+        if not runner:
+            self.skipTest('Defina LUAU_BIN para executar os testes de Luau.')
+        source = (ROOT / 'src' / '30_actions.luau').read_text(encoding='utf-8')
+        properties = source[source.index('    Actions.originals ='):source.index('    local function onCleanup')]
+        clouds = source[source.index('    local cloudTarget'):source.index('    local function applyLighting()')]
+        setup = (ROOT / 'tests' / 'clouds_spec.luau').read_text(encoding='utf-8')
+        spec = (ROOT / 'tests' / 'clouds_assert.luau').read_text(encoding='utf-8')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'clouds.luau'
+            path.write_text(setup + properties + clouds + spec, encoding='utf-8')
+            subprocess.run([runner, str(path)], check=True, capture_output=True, text=True)
 
     def test_hook_primitives_are_not_used_in_source(self):
         # Este teste só verifica o código local, não dependências ou executor.
@@ -357,6 +444,7 @@ local Color3 = {fromRGB = function(...) return {...} end, new = function(...) re
 local FX = { BBC_Atmosfera={}, BBC_Ceu={}, BBC_Nuvens={}, BBC_Bloom={}, BBC_Blur={}, BBC_CorAjuste={}, BBC_CorTon={}, BBC_Profundidade={}, BBC_Raios={} }
 function Actions.setProperty(obj, prop, value) obj[prop] = value end
 function Actions.restoreProperty(obj, prop) obj[prop] = nil end
+local function applyClouds(enabled, cover) FX.BBC_Nuvens.Enabled = enabled; FX.BBC_Nuvens.Cover = cover end
 """
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'lighting_settings.luau'
@@ -924,6 +1012,19 @@ local UDim2 = {fromScale = function() return {mode='scale'} end, new = function(
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'properties.luau'
             path.write_text('local Actions = {}\n' + helper + spec, encoding='utf-8')
+            subprocess.run([runner, str(path)], check=True, capture_output=True, text=True)
+
+    def test_actions_initializer_with_strict_enums_if_luau_available(self):
+        runner = os.environ.get('LUAU_BIN')
+        if not runner:
+            self.skipTest('Defina LUAU_BIN para executar os testes de Luau.')
+        source = (ROOT / 'src' / '30_actions.luau').read_text(encoding='utf-8')
+        helper = source[:source.index('-- ============================================================\n--  SERVIDORES')]
+        setup = (ROOT / 'tests' / 'actions_init_spec.luau').read_text(encoding='utf-8')
+        spec = (ROOT / 'tests' / 'actions_init_assert.luau').read_text(encoding='utf-8')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'actions_init.luau'
+            path.write_text(setup + helper + spec, encoding='utf-8')
             subprocess.run([runner, str(path)], check=True, capture_output=True, text=True)
 
     def test_profile_initialization_closures_with_luau_if_available(self):

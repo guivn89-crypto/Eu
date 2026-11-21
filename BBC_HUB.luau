@@ -4639,33 +4639,70 @@ local function initializeActions()
         troncos = Color3.fromRGB(100, 70, 45),
     }
     local FX = {}
-    local function mkFx(class, name, parent)
+    local function mkFx(class, name, parent, disabled)
+        local instance
         local ok, o = pcall(function()
-            local i = Instance.new(class)
-            i.Name = name
-            i.Parent = parent
-            return i
+            instance = Instance.new(class)
+            instance.Name = name
+            -- Clouds e os efeitos começam desligados antes de serem associados:
+            -- evita uma ativação transitória e conflito na criação da interface.
+            if disabled then instance.Enabled = false end
+            instance.Parent = parent
+            return instance
         end)
+        if not ok and instance then pcall(function() instance:Destroy() end) end
         FX[name] = ok and o or nil
         return FX[name]
     end
-    mkFx("BloomEffect", "BBC_Bloom", Lighting)
-    mkFx("BlurEffect", "BBC_Blur", Lighting)
-    mkFx("ColorCorrectionEffect", "BBC_CorAjuste", Lighting)
-    mkFx("ColorCorrectionEffect", "BBC_CorTon", Lighting)
-    mkFx("DepthOfFieldEffect", "BBC_Profundidade", Lighting)
-    mkFx("SunRaysEffect", "BBC_Raios", Lighting)
-    mkFx("Atmosphere", "BBC_Atmosfera", Lighting)
-    mkFx("Sky", "BBC_Ceu", Lighting)
-    mkFx("Clouds", "BBC_Nuvens", Terrain)
-    -- tudo começa desligado: só entra em cena quando o botão liga
-    for _, name in ipairs({ "BBC_Bloom", "BBC_Blur", "BBC_CorAjuste", "BBC_CorTon", "BBC_Profundidade", "BBC_Raios", "BBC_Atmosfera" }) do
-        local o = FX[name]
-        if o then pcall(function() o.Enabled = false end) end
+    mkFx("BloomEffect", "BBC_Bloom", Lighting, true)
+    mkFx("BlurEffect", "BBC_Blur", Lighting, true)
+    mkFx("ColorCorrectionEffect", "BBC_CorAjuste", Lighting, true)
+    mkFx("ColorCorrectionEffect", "BBC_CorTon", Lighting, true)
+    mkFx("DepthOfFieldEffect", "BBC_Profundidade", Lighting, true)
+    mkFx("SunRaysEffect", "BBC_Raios", Lighting, true)
+    -- Atmosphere e Sky não possuem Enabled: ficam fora da árvore até o uso.
+    mkFx("Atmosphere", "BBC_Atmosfera", nil)
+    mkFx("Sky", "BBC_Ceu", nil)
+
+    -- Reutiliza as nuvens do jogo, se existirem, para não disputar com uma
+    -- segunda instância. Apenas a instância criada pelo hub é destruída.
+    local cloudTarget
+    local function applyClouds(enabled, cover)
+        if cloudTarget and (not enabled or cloudTarget.Parent ~= Terrain) then
+            Actions.restoreProperty(cloudTarget, "Cover")
+            Actions.restoreProperty(cloudTarget, "Enabled")
+            if cloudTarget == FX.BBC_Nuvens then
+                pcall(function() cloudTarget:Destroy() end)
+                FX.BBC_Nuvens = nil
+            end
+            cloudTarget = nil
+        end
+        if not enabled then return end
+        if not cloudTarget then
+            local ok, children = pcall(function() return Terrain:GetChildren() end)
+            if not ok then return end -- não criar uma duplicata se não pudermos verificar
+            local first
+            for _, child in ipairs(children) do
+                if child:IsA("Clouds") then
+                    first = first or child
+                    if child.Enabled then cloudTarget = child; break end
+                end
+            end
+            cloudTarget = cloudTarget or first
+            if not cloudTarget then
+                cloudTarget = mkFx("Clouds", "BBC_Nuvens", nil, true)
+                if not cloudTarget then return end
+                local parented = pcall(function() cloudTarget.Parent = Terrain end)
+                if not parented then
+                    pcall(function() cloudTarget:Destroy() end)
+                    FX.BBC_Nuvens, cloudTarget = nil, nil
+                    return
+                end
+            end
+        end
+        Actions.setProperty(cloudTarget, "Cover", cover)
+        Actions.setProperty(cloudTarget, "Enabled", true)
     end
-    if FX.BBC_Nuvens then pcall(function() FX.BBC_Nuvens.Enabled = false end) end
-    if FX.BBC_Ceu then FX.BBC_Ceu.Parent = nil end
-    if FX.BBC_Atmosfera then FX.BBC_Atmosfera.Parent = nil end
 
     local function applyLighting()
         pcall(function()
@@ -4695,10 +4732,7 @@ local function initializeActions()
                 FX.BBC_Ceu.StarCount = Actions.getAdjustment("skyStars")
                 FX.BBC_Ceu.Parent = (m and WORLD.ceu) and Lighting or nil
             end
-            if FX.BBC_Nuvens then
-                local ok = pcall(function() FX.BBC_Nuvens.Enabled = m and WORLD.nuvens; FX.BBC_Nuvens.Cover = Actions.getAdjustment("cloudCover") end)
-                if not ok then FX.BBC_Nuvens.Parent = (m and WORLD.nuvens) and Workspace or nil end
-            end
+            applyClouds(m and WORLD.nuvens, Actions.getAdjustment("cloudCover"))
             if FX.BBC_Bloom then
                 FX.BBC_Bloom.Enabled = m and WORLD.florescer
                 FX.BBC_Bloom.Intensity = Actions.getAdjustment("bloom")
@@ -4736,7 +4770,7 @@ local function initializeActions()
     -- terreno: cores de material de verdade
     local TERRAIN_MATS = {
         grama = Enum.Material.Grass, areia = Enum.Material.Sand,
-        rocha = Enum.Material.Rock, terra = Enum.Material.Dirt,
+        rocha = Enum.Material.Rock, terra = Enum.Material.Ground,
     }
     local function paintTerrain(key, c)
         pcall(function()
