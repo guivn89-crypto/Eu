@@ -196,6 +196,11 @@ do
         end
         return math.max(above, 1.5), math.max(below, 1.5)
     end
+    local function projectBounds(c, center, above, below)
+        -- Os extremos ficam no plano da tela e à mesma profundidade da raiz.
+        local up = c.CFrame.UpVector
+        return c:WorldToViewportPoint(center + up * above), c:WorldToViewportPoint(center - up * below)
+    end
     local function drawTarget(d, t, S, c, vp, isNearest)
         local near = isNearest and S.nearest.on
         local ncol = S.nearest.color
@@ -207,8 +212,7 @@ do
             local sz = t.model:IsA("Model") and t.model:GetExtentsSize() or t.model.Size
             center, above, below = t.model:GetPivot().Position, sz.Y / 2, sz.Y / 2
         end
-        local topV = c:WorldToViewportPoint(center + Vector3.new(0, above, 0))
-        local botV = c:WorldToViewportPoint(center - Vector3.new(0, below, 0))
+        local topV, botV = projectBounds(c, center, above, below)
         d.root.Visible = true
         -- esconde tudo; só reaparece o que estiver ligado
         d.boxFull.Visible = false
@@ -290,7 +294,13 @@ do
             if S.health.on and t.hum then
                 d.hp.Visible = true; d.hp.Text = tostring(math.floor(t.hum.Health)); d.hp.TextSize = ts
                 d.hp.TextColor3 = S.healthbar.auto and hpColor(S, ratio) or S.health.color
-                d.hp.Position = UDim2.fromOffset(left - 5 - (S.healthbar.on and S.healthbar.width or 0), top)
+                if S.healthbar.side == "Direita" then
+                    d.hp.AnchorPoint = Vector2.new(0, 0.5); d.hp.TextXAlignment = Enum.TextXAlignment.Left
+                    d.hp.Position = UDim2.fromOffset(left + wid + 7 + (S.healthbar.on and S.healthbar.width or 0), top + hgt / 2)
+                else
+                    d.hp.AnchorPoint = Vector2.new(1, 0.5); d.hp.TextXAlignment = Enum.TextXAlignment.Right
+                    d.hp.Position = UDim2.fromOffset(left - 7 - (S.healthbar.on and S.healthbar.width or 0), top + hgt / 2)
+                end
             end
             if S.name.on then
                 d.name.Visible = true; d.name.Text = t.name; d.name.TextSize = ts; d.name.TextColor3 = S.name.color

@@ -451,7 +451,7 @@ local function T(tab, name, default, tip)
     if name == "Buscar chefes" then o.Warning = true end
     o.CanSet = function(v)
         if Library.Safety:allow(name, v) then return true end
-        notify("Bloqueado pelo modo preventivo: " .. name)
+        notify("Indisponível durante o modo pânico: " .. name)
         return false
     end
     local control = tab:Toggle(o)

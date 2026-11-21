@@ -16,7 +16,7 @@ aparecem ao **segurar** (toque) ou passar o mouse por cima.
 | `src/10_ui.luau` | Elementos de UI (Toggle, Slider, Dropdown, Button, Keybind, cor…) |
 | `src/20_config.luau` | Perfil, idiomas, configuração e persistência |
 | `src/24_runtime.luau` | Diagnóstico local, escala e varredura incremental |
-| `src/25_security.luau` | Lista e regras do bloqueio preventivo |
+| `src/25_security.luau` | Rastreamento e interrupção para pânico, erros e respawn |
 | `src/26_guard.luau` | Proteção de eventos e laços periódicos |
 | `src/27_profiles.luau` | Validação e aplicação defensiva de perfis |
 | `src/28_operations.luau` | Limites locais e seleção explícita de remote |
@@ -88,8 +88,13 @@ mira** só altera a seleção de alvos. **Avisos de denúncias** e os indicadore
 ESP de K/D e denúncias permanecem indisponíveis sem fontes confiáveis; o campo
 de denúncias no perfil mostra “—”. O K/D do perfil é calculado a partir dos
 abates e mortes locais ou fornecidos pelo jogo, não uma estatística verificada.
-O bloqueio preventivo ainda pode manter desligados padrões que no menu original
-eram apenas visuais. Algumas opções e ferramentas adicionais permanecem no menu.
+O bloqueio preventivo foi removido, mas pânico, verificações de integridade e
+limitações de recursos ainda existem. Algumas opções e ferramentas adicionais
+permanecem no menu; não se afirma que a interface seja idêntica em tudo. Na
+comparação textual dos grupos e dos toggles, sliders e widgets com nome literal
+analisados contra o commit original `72def6a`, não foram encontrados nomes
+originais ausentes; isso não comprova a aparência, ordem de todos os detalhes
+ou funcionamento no Roblox.
 
 ## Abas
 
@@ -114,7 +119,16 @@ eram apenas visuais. Algumas opções e ferramentas adicionais permanecem no men
 - O modo **Corpo** mostra a pose **caída** (deitado).
 - **Recipiente**, **Item no chão** e **Itens de missão** marcam baús, caixas,
   itens soltos (com prompt/clique ou atributo de raridade) e itens de missão.
-- Pré-visualização ao vivo na aba, com chips de atalho e ajustes por opção.
+- Pré-visualização ao vivo na aba, com chips de atalho e ajustes por opção. A
+  prévia é um desenho, não uma renderização do avatar real; o `Highlight` usa
+  as peças do personagem do jogo. Configurações salvas podem substituir as cores
+  e estilos padrão. Perfis antigos com contorno booleano são convertidos em
+  memória ao carregar; o arquivo original não é alterado pela conversão. O
+  contorno real pode ser ligado ou desligado, mas o Roblox
+  não oferece espessura variável para `Highlight`.
+- A projeção usa um plano alinhado à câmera, atualizada a cada quadro; o ESP
+  usa dimensões aproximadas do rig, podendo precisar de ajuste em avatares
+  personalizados. Essas alterações ainda precisam de teste real no Delta.
 
 ## Lógica dos botões
 
@@ -149,7 +163,7 @@ da estrutura do jogo; alterações no cliente não garantem efeito no servidor:
   receberam ajustes locais: tempos e distâncias, efeitos, corpo em primeira
   pessoa, marcações e apresentação. As quatro ainda sem ajustes são Mochila,
   Mochila personalizada, Mira falsa e Trocar personagem. Mudanças numéricas
-  passam por limites locais; não alteram a política preventiva.
+  passam por limites locais; não alteram recursos dependentes do servidor.
 - **Barra rápida**: painel local para até oito objetos `Tool` da mochila e do
   personagem, com toque/clique para equipar ou guardar. Não substitui a barra
   nativa e não suporta inventários próprios que não usem `Tool`.
@@ -200,13 +214,11 @@ A revisão das proteções e das limitações conhecidas está em [SECURITY_REVI
   [orientações de segurança do Roblox](https://create.roblox.com/docs/scripting/security/security-tactics),
   que descrevem validação no servidor. Essas fontes não garantem compatibilidade
   com executores atuais nem imunidade ao anticheat.
-- O **Bloqueio preventivo** começa ligado em CONFIGURAÇÕES → SEGURANÇA. Ele
-  bloqueia uma lista fixa de opções de maior risco, inclusive quando ativadas
-  por atalho, botão fixo ou perfil. O bloqueio inclui Anti AFK, que simula
-  entrada. A política também é verificada na entrada das ações listadas e
-  antes de algumas operações (saque, recarga, mira, aura e atravessar porta).
-  Não examina o anticheat do jogo. Para usar
-  essas opções, é necessário desligá-lo manualmente a cada sessão.
+- O bloqueio preventivo foi removido: as ações implementadas não são bloqueadas
+  por essa política durante o uso normal. Não há detector de anticheat nem
+  garantia contra punição. Pânico, tratamento de erros e proteção de perfis
+  continuam ativos; funções VIP, pendentes ou dependentes de jogo podem continuar
+  indisponíveis por outros motivos. Perfis salvos podem reativar funções.
 - Para reduzir chamadas acidentais, o saque automático respeita a distância
   anunciada pelo `ProximityPrompt` e está limitado a uma tentativa a cada 2 s e
   dez por 60 s; a recarga, a uma tentativa a cada 5 s e seis por 60 s. Esses
@@ -226,8 +238,7 @@ A revisão das proteções e das limitações conhecidas está em [SECURITY_REVI
 
   Isso não verifica autorização do servidor. Nomes repetidos são rejeitados e
   objetos em streaming podem estar ausentes temporariamente.
-- A recarga não procura mais um remote por conter "reload" no nome. Mesmo com
-  o bloqueio preventivo desligado, ela exige `getgenv().BBC_CONFIG.ReloadRemotePath`,
+- A recarga não procura mais um remote por conter "reload" no nome. Ela exige `getgenv().BBC_CONFIG.ReloadRemotePath`,
   uma lista de nomes exatos do caminho relativo à ferramenta equipada. Use
   apenas um caminho conhecido e autorizado para o jogo; sem configuração, ou
   com caminho incorreto/ambíguo, nenhum remote é enviado. O caminho não prova
@@ -239,8 +250,7 @@ A revisão das proteções e das limitações conhecidas está em [SECURITY_REVI
   getgenv().BBC_CONFIG.ReloadRemotePath = {"PastaConhecida", "RemoteConhecido"}
   ```
 
-- Ao religar o bloqueio ou acionar o pânico, as opções da lista que estiverem
-  ligadas são desligadas. O pânico também oculta interface e ESP, mas não
+- Ao acionar o pânico, as opções rastreadas que estiverem ligadas são desligadas. O pânico também oculta interface e ESP, mas não
   reverte todas as alterações. Após sair do pânico, opções desligadas não são
   religadas automaticamente. Um mecanismo adicional tenta interromper estados
   e tarefas de risco mesmo se algum controle falhar ao desligar; a restauração
@@ -269,7 +279,7 @@ A revisão das proteções e das limitações conhecidas está em [SECURITY_REVI
   respeitam o pânico e têm limite de 100 por categoria. Elas não acompanham
   automaticamente novos objetos: desligue e ligue para procurar novamente.
 - Em **CONFIGURAÇÕES → DIAGNÓSTICO**, atualize capacidades de arquivos/entrada,
-  configuração de caminhos, estado preventivo e até três falhas registradas.
+  configuração de caminhos e até três falhas registradas.
   Presença de API ou caminho válido não comprova execução, autorização,
   compatibilidade do jogo ou proteção anticheat; nem todas as falhas são capturadas.
 - A [documentação de detecção no servidor do Roblox](https://create.roblox.com/docs/scripting/security/server-side-detection)
@@ -294,7 +304,7 @@ A revisão das proteções e das limitações conhecidas está em [SECURITY_REVI
   literais de construtores com um [snapshot parcial de API](tests/roblox_api_snapshot.json)
   versionado. É uma cópia parcial de uma fonte comunitária, não verifica nomes
   dinâmicos, permissões, efeitos de execução ou mudanças futuras da API.
-- O compilador Luau e os testes de política podem ser executados definindo
+- O compilador Luau e os testes de pânico podem ser executados definindo
   `LUAU_COMPILE` e `LUAU_BIN`, respectivamente, antes de
   `python3 -m unittest discover -s tests -v`. A suíte também verifica a
   compilação do arquivo completo com otimizações 0, 1 e 2, além de `loadstring`,
@@ -308,7 +318,7 @@ Em **CONFIGURAÇÕES → CONFIGURAÇÃO DO MENU**, escolha um nome e use **Salva
 configuração** ou **Revisar configuração** seguido de **Confirmar carregamento**.
 A revisão não executa controles e mostra todas as alterações em páginas de 50,
 com contagens de bloqueios e dados desconhecidos. A confirmação expira em 60 segundos e exige
-nova revisão se o arquivo, os valores relevantes ou a política mudarem. Valores
+nova revisão se o arquivo, os valores relevantes ou o estado de pânico mudarem. Valores
 tabulados grandes são resumidos. Essa confirmação é do botão do menu: autoload,
 recuperação e APIs programáticas continuam tendo seu fluxo próprio. Salvar ou
 confirmar também seleciona o arquivo para iniciar; após isso o salvamento
@@ -330,7 +340,7 @@ de proteção e dependem das APIs de arquivos do executor.
 
 O painel mostra a configuração ativa e lista até 100 arquivos quando `listfiles`
 está disponível; arquivos além desse limite ainda podem ser carregados pelo nome.
-O bloqueio preventivo continua ativo ao iniciar e pode impedir opções de risco.
+O modo pânico ainda pode impedir a ativação enquanto estiver ligado.
 O nome usa até 24 letras, números, espaços, hífen ou sublinhado. O nome
 `none` é reservado para desativar o carregamento inicial; esse arquivo pode ser
 salvo ou carregado manualmente, mas não selecionado para iniciar.
@@ -380,7 +390,7 @@ Projeto de estudo/entretenimento. Use por sua conta e risco.
 - Aparência oferece temas, prévia e aplicação explícita de cor personalizada, alto contraste e redução de movimento. A cor é apenas visual. Alto contraste melhora superfícies e texto, mas não garante uma razão de contraste para toda cor escolhida. Movimento reduzido cobre as principais transições da biblioteca e a animação da prévia; não é garantia sobre animações do jogo ou outras GUIs.
 - A busca aceita o nome original e a tradução disponível, mostra até 40 resultados clicáveis com caminho e abre temporariamente submenus correspondentes. Contagens aparecem nas abas; Enter seleciona o primeiro resultado, Ctrl+F abre a busca e Esc a fecha quando ela está em foco. A normalização cobre ASCII, letras latinas comuns e cirílico básico, mas não todo Unicode; traduções ausentes permanecem no original.
 - Em telas estreitas ou retrato com toque, os grupos passam a uma coluna e algumas linhas têm área de toque maior; quando há espaço suficiente novamente, a divisão original é restaurada. Painéis de prévia ainda precisam de teste em dispositivos reais e a escala continua limitada pelo tamanho da tela.
-- A prévia de cor mostra razões de contraste aproximadas entre cor e superfície atual e entre branco e cor; o aviso de 4,5:1 não certifica a interface inteira. Dicas distinguem opção pendente, VIP e bloqueio preventivo.
+- A prévia de cor mostra razões de contraste aproximadas entre cor e superfície atual e entre branco e cor; o aviso de 4,5:1 não certifica a interface inteira. Dicas distinguem opção pendente, VIP e pânico.
 - O diagnóstico apresenta uma média aproximada do tempo do callback visual do ESP/radar/busca, em milissegundos, atualizada ao solicitar diagnóstico. Não mede GPU, FPS nem o custo total do jogo.
 - As preferências visuais são espelhadas em `BBC_HUB/appearance.json` e aplicadas antes da intro, sem carregar opções de jogo. Temas e cores também entram nos perfis; contrastes e preferências de movimento são controles de perfil. O autoload de perfil ocorre depois da montagem e pode substituir a aparência inicial. O arquivo visual anterior é copiado para `appearance.json.bak`; arquivos visuais inválidos são preservados e seu salvamento bloqueado. As APIs de arquivo podem não existir e a escrita não é atômica.
 - O diagnóstico pode copiar erros recentes se o executor fornecer uma API de área de transferência; revise o conteúdo antes de compartilhá-lo, pois mensagens podem conter informações locais. Presença da API não garante funcionamento.

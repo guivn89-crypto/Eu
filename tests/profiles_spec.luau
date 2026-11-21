@@ -40,3 +40,17 @@ local failRegistry = {
 ops = assert(guard:prepare({a = 20, b = 99}, failRegistry, {}))
 assert(not guard:apply(ops) and first == 1 and second == 2)
 print("profile validation OK")
+
+-- Um perfil da versão com toggle deve carregar sem perder a opção de contorno.
+local outline = 2
+local path = "VISUAIS/ESP/Jogador/painel/sub2/Contorno"
+local migrationRegistry = {[path] = {get=function() return outline end, set=function(v) outline=v end}}
+local legacy = {v=2, data={[path]=true}}
+local migrated = assert(guard:prepare(legacy, migrationRegistry, {}))
+assert(legacy.data[path] == true and guard:apply(migrated) and outline == 1.5)
+legacy.data[path] = false
+migrated = assert(guard:prepare(legacy, migrationRegistry, {}))
+assert(guard:apply(migrated) and outline == 0)
+local other = "VISUAIS/ESP/Desconhecido/painel/sub2/Contorno"
+assert(not guard:prepare({[other]=true}, {[other]=migrationRegistry[path]}, {}))
+print("legacy ESP outline profile migration OK")
