@@ -8,8 +8,9 @@ Não há teste aqui que prove invisibilidade ou ausência de detecção.
 
 ## Preparação
 
-- Anote data, versão do arquivo, ambiente, tipo de entrada, resolução e modelo do
-  dispositivo. Guarde logs sem credenciais, IDs privados ou dados de terceiros.
+- Anote data, hash/versão do arquivo, ambiente e sua versão, sistema operacional,
+  tipo de entrada, resolução e modelo do dispositivo. Teste o mesmo arquivo no PC
+  e no celular; um link fixado em commit anterior não recebe a correção nova. Guarde logs sem credenciais, IDs privados ou dados de terceiros.
 - Faça cópia de `BBC_HUB/configs` e `BBC_HUB/autoload.txt` antes dos testes.
   Use arquivos novos e nomes de teste, sem substituir configurações pessoais.
 - Confira que o bloqueio preventivo inicia ligado. Não o desligue para testar

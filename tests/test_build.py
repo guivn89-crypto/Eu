@@ -425,7 +425,7 @@ cam.FieldOfView = 0; COMBAT.fovDyn = true; assert(aimRadius(cam) <= 2000)
         if not runner:
             self.skipTest('Defina LUAU_BIN para executar os testes de Luau.')
         source = (ROOT / 'src' / '30_actions.luau').read_text(encoding='utf-8')
-        helper = source[source.index('    local LOCALFX ='):source.index('    -- ---------- Persistência')]
+        helper = source[source.index('    local LOCALFX ='):source.index('    -- A Home conserva seu estado')]
         spec = (ROOT / 'tests' / 'local_fx_integration_spec.luau').read_text(encoding='utf-8')
         setup = """local Actions = {alive = true, connections = {}}
 local Library = { Panic = false }
@@ -926,11 +926,45 @@ local UDim2 = {fromScale = function() return {mode='scale'} end, new = function(
             path.write_text('local Actions = {}\n' + helper + spec, encoding='utf-8')
             subprocess.run([runner, str(path)], check=True, capture_output=True, text=True)
 
+    def test_profile_initialization_closures_with_luau_if_available(self):
+        runner = os.environ.get('LUAU_BIN')
+        if not runner:
+            self.skipTest('Defina LUAU_BIN para executar os testes de Luau.')
+        source = (ROOT / 'src' / '30_actions.luau').read_text(encoding='utf-8')
+        helper = source[source.index('    local function initializeProfile()'):source.index('    -- Expor somente as referências')]
+        setup = (ROOT / 'tests' / 'profile_init_spec.luau').read_text(encoding='utf-8')
+        spec = (ROOT / 'tests' / 'profile_init_assert.luau').read_text(encoding='utf-8')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'profile_init.luau'
+            path.write_text(setup + helper + spec, encoding='utf-8')
+            subprocess.run([runner, str(path)], check=True, capture_output=True, text=True)
+
     def test_luau_compiler_if_available(self):
         compiler = os.environ.get('LUAU_COMPILE')
         if not compiler:
             self.skipTest('Defina LUAU_COMPILE para validar com o compilador oficial.')
-        subprocess.run([compiler, str(ROOT / 'BBC_HUB.luau')], stdout=subprocess.DEVNULL, check=True)
+        # -O0 é essencial: loadstring de executores pode compilar sem otimizar e
+        # manter mais variáveis em registros do que o padrão do luau-compile.
+        for level in (0, 1, 2):
+            with self.subTest(optimization=level):
+                subprocess.run([compiler, f'-O{level}', '--null', str(ROOT / 'BBC_HUB.luau')],
+                               stdout=subprocess.DEVNULL, check=True)
+
+    def test_generated_hub_loadstring_compiles_if_available(self):
+        runner = os.environ.get('LUAU_BIN')
+        if not runner:
+            self.skipTest('Defina LUAU_BIN para testar loadstring sem executar o hub.')
+        source = (ROOT / 'BBC_HUB.luau').read_text(encoding='utf-8')
+        equals = '='
+        while ']' + equals + ']' in source:
+            equals += '='
+        script = ('local source = [' + equals + '[' + source + ']' + equals + ']\n'
+                  'local fn, err = loadstring(source)\n'
+                  'assert(type(fn) == "function", tostring(err))\n')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'loadstring_compile.luau'
+            path.write_text(script, encoding='utf-8')
+            subprocess.run([runner, str(path)], check=True, capture_output=True, text=True)
 
 
 if __name__ == '__main__':

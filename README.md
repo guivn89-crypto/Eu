@@ -44,6 +44,40 @@ Cole o conteúdo de `BBC_HUB.luau` no seu executor, ou carregue por URL:
 loadstring(game:HttpGet("URL_DO_ARQUIVO"))()
 ```
 
+`URL_DO_ARQUIVO` é um exemplo, não um endereço funcional. Use o conteúdo bruto
+(**Raw**) de `BBC_HUB.luau` na versão publicada e verificada que deseja testar;
+não use a página HTML `github.com/.../blob/...`. Um link fixado em um hash de
+commit sempre aponta para aquela versão, mesmo após novas correções. Não baixe
+nem execute arquivos de origem desconhecida.
+
+### Arquivos e compatibilidade: PC e celular
+
+- O mesmo `BBC_HUB.luau` é o artefato gerado para os dois tipos de dispositivo;
+  não é necessário instalar `src/`, `build.py`, testes ou documentos no aparelho.
+  Os módulos são partes do mesmo arquivo e não devem ser executados isoladamente.
+- O formato único não garante que todos os ambientes consigam executá-lo. O
+  carregamento por URL depende das APIs de download e compilação disponíveis no
+  ambiente. Os recursos opcionais variam: perfis dependem de APIs de arquivos;
+  algumas fontes adicionais também dependem de acesso à rede e `getcustomasset`;
+  copiar texto e outras ações dependem de APIs próprias. A presença de uma API
+  não comprova que funcione. Dados locais não são sincronizados automaticamente
+  entre aparelhos ou executores.
+- Teclado/mouse e toque exigem testes separados; um dispositivo pode ter mais de
+  um método de entrada. O tamanho da tela, orientação, elementos de toque,
+  recursos disponíveis e versão do ambiente podem mudar o resultado. O
+  `MANUAL_TESTS.md` registra o que precisa ser testado.
+- A [documentação oficial de entrada](https://create.roblox.com/docs/input)
+  descreve métodos de entrada e dispositivos híbridos; o
+  [Device Emulator do Studio](https://create.roblox.com/docs/tutorials/curriculums/user-interface-design/implement-designs-in-studio)
+  ajuda a verificar layouts, mas não reproduz um executor externo. Em uma
+  experiência própria, scripts de cliente e módulos podem ser organizados pelo
+  [modelo de scripts do Roblox](https://create.roblox.com/docs/scripting/locations);
+  isso não transforma automaticamente este hub, que usa APIs específicas de
+  executores, em um projeto Studio pronto para uso.
+- O Roblox informa que software que modifica o cliente não é permitido e pode
+  levar a restrições na conta; consulte [Anti-cheat Messages](https://en.help.roblox.com/hc/en-us/articles/24275616578708-Anti-cheat-Messages).
+  Não há garantia de segurança ou compatibilidade em executores de terceiros.
+
 ## Abas
 
 | Aba | Conteúdo |
@@ -134,8 +168,10 @@ A revisão das proteções e das limitações conhecidas está em [SECURITY_REVI
 - O menu ajusta `UIScale` ao tamanho da tela; o controle **Escala do menu**
   permite escolher 70% a 130%, limitado pelo espaço disponível. Toque, teclado e mouse são
   considerados para escolher as instruções de uso; dispositivos híbridos
-  podem usar tanto toque quanto mouse. Não há teste nos executores Delta,
-  Arceus, Wave ou Potassium nem em aparelhos físicos.
+  podem usar tanto toque quanto mouse. Um teste relatado no Delta móvel falhou
+  na compilação da versão anterior por limite de registradores; a correção ainda
+  precisa de teste real. Não há validação completa em Delta, Arceus, Wave ou
+  Potassium nem em PC e aparelhos móveis.
 
 ## Segurança e limitações
 
@@ -233,7 +269,10 @@ A revisão das proteções e das limitações conhecidas está em [SECURITY_REVI
   ambientes autorizados.
 - O compilador Luau e os testes de política podem ser executados definindo
   `LUAU_COMPILE` e `LUAU_BIN`, respectivamente, antes de
-  `python3 -m unittest discover -s tests -v`. Não substituem testes no Roblox.
+  `python3 -m unittest discover -s tests -v`. A suíte também verifica a
+  compilação do arquivo completo com otimizações 0, 1 e 2, além de `loadstring`,
+  sem executar o hub. Isso não comprova compatibilidade com executores nem
+  substitui testes no Roblox.
   O roteiro de verificação em ambiente autorizado está em [MANUAL_TESTS.md](MANUAL_TESTS.md).
 
 ## Configuração do menu
