@@ -85,3 +85,19 @@ e compilação Luau não substituem este roteiro nem validam regras do servidor.
 - Comparar amostra de tema, cor candidata, contraste e aplicação efetiva. Em PC e celular, verificar recortes e toque nas dicas com três ações.
 - Salvar arquivo existente: testar confirmação em 30 segundos, mudanças no arquivo, ajustes ou nome, cancelamento e falhas de escrita. Preencher as três versões, verificar aviso, backup e restauração em novo nome sem aplicação. Autosave/API têm fluxo próprio.
 - Testar cancelar varredura de efeitos, pânico e saída; conferir restauração condicional e se uma varredura antiga não executa após desligar. Nenhum teste real foi realizado nesta rodada.
+
+## Material e nuvens (não executados no Roblox)
+
+- Abrir o hub no Delta e em um ambiente de PC, registrar versão/commit e conferir
+  se não há falha de `Enum.Material` na inicialização. Conferir menu, abas e
+  engrenagens antes de testar qualquer ação.
+- Executar em uma sessão com personagem presente e outra após respawn; verificar
+  se há mensagens novas no console e se os painéis terminam a montagem.
+- Em local de teste autorizado, mudar a cor de Terra (`Ground`) e confirmar o
+  material afetado e a restauração ao sair. Não presumir resultado em terrenos
+  feitos de partes ou materiais diferentes.
+- Testar Nuvens com uma nuvem já existente e sem nenhuma: ligar, ajustar a
+  cobertura, desligar e sair. Confirmar que a nuvem do jogo não é destruída e
+  que os valores são restaurados quando não foram alterados pelo próprio jogo.
+  Testar também mapas com várias nuvens e mudanças durante o uso; avisos já
+  existentes no mapa não são necessariamente causados pelo hub.

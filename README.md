@@ -267,6 +267,16 @@ A revisão das proteções e das limitações conhecidas está em [SECURITY_REVI
   falsificar `__namecall`, `__index`, `getfenv`, `Kick` ou nomes de remotes;
   essas técnicas não garantem imunidade e podem causar falhas. Use somente em
   ambientes autorizados.
+- A opção de cor **Terra** altera o material `Ground` do Terrain; não existe
+  `Enum.Material.Dirt`. A opção de nuvens reutiliza uma instância existente no
+  Terrain, quando possível, e tenta restaurar alterações próprias ao desligar;
+  caso não haja nuvem, cria uma somente enquanto necessário. Um mapa que já
+  tenha várias nuvens, ou que as substitua durante o uso, pode continuar
+  emitindo avisos ou apresentar comportamento diferente. Ainda requer teste real.
+- A suíte compara nomes diretos de enums, classes criáveis e propriedades
+  literais de construtores com um [snapshot parcial de API](tests/roblox_api_snapshot.json)
+  versionado. É uma cópia parcial de uma fonte comunitária, não verifica nomes
+  dinâmicos, permissões, efeitos de execução ou mudanças futuras da API.
 - O compilador Luau e os testes de política podem ser executados definindo
   `LUAU_COMPILE` e `LUAU_BIN`, respectivamente, antes de
   `python3 -m unittest discover -s tests -v`. A suíte também verifica a
