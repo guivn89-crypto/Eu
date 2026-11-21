@@ -1,0 +1,15 @@
+applyFirst(true)
+assert(LP.CameraMode == "first" and CHAR.first)
+fire(RunService.RenderStepped)
+assert(torso.LocalTransparencyModifier == 0.25 and arm.LocalTransparencyModifier == 0.25)
+assert(head.LocalTransparencyModifier == 0.75 and accessoryPart.LocalTransparencyModifier == 0.75)
+Library.Panic = true
+fire(RunService.RenderStepped)
+assert(torso.LocalTransparencyModifier == 0.25)
+Library.Panic = false
+applyFirst(false)
+assert(torso.LocalTransparencyModifier == 0.75 and arm.LocalTransparencyModifier == 0.75)
+assert(LP.CameraMode == "normal" and not CHAR.first)
+fire(RunService.RenderStepped)
+assert(torso.LocalTransparencyModifier == 0.75)
+print("first person parts and restoration OK")
