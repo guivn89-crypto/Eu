@@ -77,7 +77,7 @@ A prévia mostra apenas as primeiras 100 alterações.|The preview shows only th
 Mostra alterações sem aplicá-las; a prévia expira em 60 segundos.|Shows changes without applying them; preview expires in 60 seconds.|Muestra cambios sin aplicarlos; la vista previa vence en 60 segundos.|显示更改但不应用；预览在 60 秒后过期。|Показывает изменения без применения; срок действия предпросмотра — 60 секунд.
 Aplica a prévia se o arquivo, os ajustes e a política não mudaram.|Applies the preview if the file, settings and policy have not changed.|Aplica la vista previa si el archivo, los ajustes y la política no cambiaron.|如果文件、设置和策略未更改，则应用预览。|Применяет предпросмотр, если файл, настройки и политика не изменились.
 PENDENTE|PENDING|PENDIENTE|待实现|ОЖИДАЕТ
-Bloqueado pelo modo preventivo.|Blocked by preventive mode.|Bloqueado por el modo preventivo.|已被预防模式阻止。|Заблокировано превентивным режимом.
+Indisponível durante o modo pânico.|Unavailable during panic mode.|No disponible durante el modo pánico.|恐慌模式下不可用。|Недоступно в режиме паники.
 Cor/fundo|Color/background|Color/fondo|颜色/背景|Цвет/фон
 Branco/cor|White/color|Blanco/color|白色/颜色|Белый/цвет
 Contraste baixo em uma combinação.|Low contrast in one combination.|Contraste bajo en una combinación.|其中一种组合对比度较低。|Низкий контраст в одном сочетании.
@@ -160,7 +160,6 @@ Carregar configuração|Load configuration|Cargar configuración|加载配置|З
 Escolha um nome para salvar ou carregar os ajustes do menu.|Choose a name to save or load menu settings.|Elige un nombre para guardar o cargar los ajustes del menú.|选择名称以保存或加载菜单设置。|Выберите имя для сохранения или загрузки настроек меню.
 Salva os ajustes atuais e seleciona este arquivo para iniciar.|Saves current settings and selects this file at startup.|Guarda los ajustes actuales y selecciona este archivo al iniciar.|保存当前设置并选择此文件用于启动。|Сохраняет текущие настройки и выбирает файл для запуска.
 Carrega os ajustes salvos com este nome.|Loads the settings saved under this name.|Carga los ajustes guardados con este nombre.|加载以此名称保存的设置。|Загружает настройки, сохранённые под этим именем.
-O bloqueio preventivo continua ativo ao iniciar.|The preventive block remains active at startup.|El bloqueo preventivo sigue activo al iniciar.|启动时预防性阻止仍然有效。|Предупредительная блокировка остаётся активной при запуске.
 Salvo, mas não foi possível selecionar o carregamento inicial.|Saved, but startup loading could not be selected.|Guardado, pero no se pudo seleccionar la carga inicial.|已保存，但无法选择启动加载。|Сохранено, но не удалось выбрать загрузку при запуске.
 Carregado, mas não foi possível selecionar o carregamento inicial.|Loaded, but startup loading could not be selected.|Cargado, pero no se pudo seleccionar la carga inicial.|已加载，但无法选择启动加载。|Загружено, но не удалось выбрать загрузку при запуске.
 Zoom máximo|Maximum zoom|Zoom máximo|最大缩放|Максимальный зум
@@ -355,7 +354,6 @@ Pontos de saída|Exit points|Puntos de salida|撤离点|Точки выхода
 Radar|Radar|Radar|雷达|Радар
 Troca rápida|Quick swap|Cambio rápido|快速切换|Быстрая смена
 Modo pânico|Panic mode|Modo pánico|紧急模式|Режим паники
-Bloqueio preventivo|Preventive block|Bloqueo preventivo|预防性拦截|Превентивная блокировка
 Remover efeitos|Remove effects|Quitar efectos|移除特效|Убрать эффекты
 Avisos de entrada|Join alerts|Avisos de entrada|进入提醒|Уведомления о входе
 Criador|Creator|Creador|创作者|Создатель
@@ -602,11 +600,6 @@ local tipText = function(s)
     return e[currentLang] or s
 end
 for k, v in pairs({
-    ["Bloqueia uma lista de opções de maior risco, sem detectar o anticheat do jogo. Não garante segurança."] = {
-        en = "Blocks a list of higher-risk options without detecting the game's anti-cheat. It does not guarantee safety.",
-        es = "Bloquea una lista de opciones de mayor riesgo sin detectar el antitrampas del juego. No garantiza seguridad.",
-        zh = "阻止一系列风险较高的选项，但不会检测游戏的反作弊系统，也无法保证安全。",
-        ru = "Блокирует список опций повышенного риска, не обнаруживая античит игры. Безопасность не гарантируется." },
     ["Longe, mostra só um ponto e a distância. Perto, mostra tudo."] = {
         en = "Far away shows only a dot and the distance. Close up, shows everything.",
         es = "Lejos muestra solo un punto y la distancia. De cerca, muestra todo.",

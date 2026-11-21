@@ -385,6 +385,42 @@ function LP:FindFirstChildOfClass(n) return backpack end
         self.assertNotIn('Actions.WEAPON.spread', tabs)
         self.assertNotIn('Actions.WEAPON.gap', tabs)
 
+    def test_no_preventive_mode_in_menu_or_profile_load(self):
+        tabs = (ROOT / 'src' / '50_tabs.luau').read_text(encoding='utf-8')
+        ui = (ROOT / 'src' / '10_ui.luau').read_text(encoding='utf-8')
+        safety = (ROOT / 'src' / '25_security.luau').read_text(encoding='utf-8')
+        self.assertNotIn('Name = "Bloqueio preventivo"', tabs)
+        self.assertNotIn('policy.enabled', ui)
+        self.assertNotIn('function Library.Safety:setEnabled', safety)
+        self.assertIn('(policy and policy.panic) and policy.blocked or {}', ui)
+        self.assertIn('Library.Safety:disableTracked()', (ROOT / 'src' / '40_menu.luau').read_text(encoding='utf-8'))
+
+    def test_esp_preview_builds_and_updates_with_luau(self):
+        runner = os.environ.get('LUAU_BIN')
+        if not runner:
+            self.skipTest('Defina LUAU_BIN para executar os testes de Luau.')
+        tabs = (ROOT / 'src' / '50_tabs.luau').read_text(encoding='utf-8')
+        panel = tabs[tabs.index('local function buildEspPanel'):tabs.index('MODALS["Jogador"]')]
+        spec = (ROOT / 'tests' / 'esp_preview_spec.luau').read_text(encoding='utf-8')
+        parts = spec.split('-- INSERT IMPLEMENTATION HERE')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'esp_preview.luau'
+            path.write_text(parts[0] + panel + parts[1], encoding='utf-8')
+            subprocess.run([runner, str(path)], check=True, capture_output=True, text=True)
+
+    def test_esp_draw_with_luau(self):
+        runner = os.environ.get('LUAU_BIN')
+        if not runner:
+            self.skipTest('Defina LUAU_BIN para executar os testes de Luau.')
+        engine = (ROOT / 'src' / '60_engine.luau').read_text(encoding='utf-8')
+        drawing = engine[engine.index('    local function characterOffsets'):engine.index('    local function gather(')]
+        spec = (ROOT / 'tests' / 'esp_draw_spec.luau').read_text(encoding='utf-8')
+        parts = spec.split('-- INSERT IMPLEMENTATION HERE')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'esp_draw.luau'
+            path.write_text(parts[0] + drawing + parts[1], encoding='utf-8')
+            subprocess.run([runner, str(path)], check=True, capture_output=True, text=True)
+
     def test_esp_rig_offsets_and_render_caching_with_luau(self):
         runner = os.environ.get('LUAU_BIN')
         if not runner:
@@ -1062,6 +1098,20 @@ local UDim2 = {fromScale = function() return {mode='scale'} end, new = function(
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'actions_init.luau'
             path.write_text(setup + helper + spec, encoding='utf-8')
+            subprocess.run([runner, str(path)], check=True, capture_output=True, text=True)
+
+    def test_existing_actions_with_real_panic_guard(self):
+        runner = os.environ.get('LUAU_BIN')
+        if not runner:
+            self.skipTest('Defina LUAU_BIN para executar os testes de Luau.')
+        source = (ROOT / 'src' / '30_actions.luau').read_text(encoding='utf-8')
+        helper = source[:source.index('-- ============================================================\n--  SERVIDORES')]
+        setup = (ROOT / 'tests' / 'actions_init_spec.luau').read_text(encoding='utf-8')
+        safety = (ROOT / 'src' / '25_security.luau').read_text(encoding='utf-8')
+        spec = (ROOT / 'tests' / 'actions_preserved_spec.luau').read_text(encoding='utf-8')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'actions_preserved.luau'
+            path.write_text(setup + safety + helper + spec, encoding='utf-8')
             subprocess.run([runner, str(path)], check=True, capture_output=True, text=True)
 
     def test_profile_initialization_closures_with_luau_if_available(self):

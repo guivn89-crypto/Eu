@@ -2490,7 +2490,7 @@ function Container:Toggle(opts)
         if opts.Disabled then return "pending" end
         if opts.Premium and Library.Access ~= "VIP" then return "vip" end
         local policy = Library.Safety
-        if policy and policy.blocked[opts.Name] and (policy.enabled or policy.panic) then return "blocked" end
+        if policy and policy.blocked[opts.Name] and policy.panic then return "blocked" end
         return state
     end
     local function tipDescription()
@@ -2501,7 +2501,7 @@ function Container:Toggle(opts)
             if type(e) == "string" then tip = e elseif e then tip = (tipFor and tipFor(opts.Name)) or e.pt end
         end
         local status = tipStatus()
-        local reason = status == "pending" and "Indisponível: implementação pendente." or status == "vip" and "Recurso exclusivo VIP." or status == "blocked" and "Bloqueado pelo modo preventivo." or nil
+        local reason = status == "pending" and "Indisponível: implementação pendente." or status == "vip" and "Recurso exclusivo VIP." or status == "blocked" and "Indisponível durante o modo pânico." or nil
         return (tip and tostring(tip) or "") .. (reason and ("\n" .. Library.Tr(reason)) or "")
     end
     if Library.Favorites and not opts.NoSave then

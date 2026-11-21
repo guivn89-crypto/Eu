@@ -26,10 +26,10 @@ Não há garantia de segurança, de ausência de detecção ou de punição.
 
 | Camada | Medida atual | Limitação |
 | --- | --- | --- |
-| Política | Lista bloqueada por padrão; checagem no menu, perfis e ações registradas. | Lista fixa e parcial, não detecta regras nem cobre todos os caminhos e dependências. |
-| Interrupção | Pânico/religar a política desliga controles rastreados e tenta interromper estados e tarefas críticos independentemente dos controles. | Callbacks e restaurações podem falhar; estado já processado pelo servidor não é desfeito. |
+| Ativação | Sem bloqueio preventivo automático; controles e ações podem ser ativados durante uso normal. | Não há detecção de anticheat nem garantia contra punição. |
+| Interrupção | Pânico desliga controles rastreados e tenta interromper estados e tarefas críticos independentemente dos controles. | Callbacks e restaurações podem falhar; estado já processado pelo servidor não é desfeito. |
 | Eventos e loops | Interrupção após falhas consecutivas nos caminhos integrados. | Erros já capturados internamente podem passar despercebidos; cobertura incompleta. |
-| Remotes e prompts | Limites locais; recarga exige caminho explícito e saque exige PlaceId e caminhos exatos de prompts, recusando ambiguidades. | Isso não comprova autorização nem sucesso no servidor; ambos permanecem bloqueados por padrão. |
+| Remotes e prompts | Limites locais; recarga exige caminho explícito e saque exige PlaceId e caminhos exatos de prompts, recusando ambiguidades. | Isso não comprova autorização nem sucesso no servidor. |
 | Interface | Tenta API opcional de proteção e parent com fallback; limita notificações. | O executor pode não oferecer a API ou sua implementação pode falhar. Sucesso da chamada não prova ocultação. |
 | Configurações | Validação, tentativa de rollback, backup anterior válido e bloqueio do autosave após falha inicial. Arquivos antigos são preservados. | Escrita/backup não são atômicos, não há recuperação automática e callbacks podem ter efeitos externos. |
 | Dependências | Ícones Lucide com IDs de asset incluídos localmente (MIT); não executa código remoto/cacheado para ícones. | Outros assets, fontes e o executor ainda têm riscos. |
@@ -42,8 +42,8 @@ Não há garantia de segurança, de ausência de detecção ou de punição.
 - Engrenagens do menu foram recolocadas. Parte delas tem ajustes específicos
   ligados à ação; as demais exibem aviso de pendência sem controles fictícios.
   Submenus reintroduzidos usam caminhos de perfil por nome; valores antigos dos
-  ajustes genéricos não são migrados. Campos de estatísticas e o marcador
-  solicitados para exclusão continuam removidos.
+  ajustes genéricos não são migrados. Denúncias permanecem indisponíveis e
+  o K/D no perfil é calculado a partir de dados locais ou do jogo.
 - FOV dinâmico altera o raio com o FOV da câmera. A verificação opcional de
   acertos utiliza a tag `creator`, que pode não existir ou não ser confiável.
 - Animações procuram assets existentes no personagem; não inventam IDs.

@@ -8,7 +8,6 @@
 local function buildEspPanel(kind)
     return function(m)
         local B = Library.Bind
-        local TweenService = game:GetService("TweenService")
         local CVW, CVH, CX, CY = 212, 205, 106, 100
         local corpse = kind == "Corpo"
         local isProp = kind == "Recipiente" or kind == "Item no chão" or kind == "Itens de missão"
@@ -28,12 +27,6 @@ local function buildEspPanel(kind)
             lod = { on = true, near = 150 }, nearest = { on = false, color = Color3.fromRGB(255, 60, 60) },
             maxDist = 1000, textSize = 11, prevDist = 120, prevHp = (corpse or isProp) and 0 or 100,
         }
-        if kind == "Jogador" or kind == "NPCs" then
-            S.highlight.color, S.highlight.alpha, S.highlight.outline, S.highlight.outlineColor = Color3.fromRGB(40, 200, 170), 0.5, 2, nil
-            S.box.color, S.box.thick, S.box.style = Color3.fromRGB(80, 150, 255), 2, "Cantos"
-            S.name.color = Color3.fromRGB(255, 120, 150)
-            S.healthbar.auto, S.health.on = true, true
-        end
         S.kdr = { on = false }; S.reports = { on = false }
         S.arrows = { on = false, color = Color3.fromRGB(255, 90, 90), size = 18 }
         Library.ESP = Library.ESP or {}
@@ -78,7 +71,6 @@ local function buildEspPanel(kind)
 
         -- boneco em silhueta: blocos separados (cabeça, tronco, braços, pernas e
         -- pés), como um avatar blocudo. O "Corpo" usa a pose caída (deitado).
-        local originalPose = kind == "Jogador" or kind == "NPCs"
         local POSE = isProp and {
             w = 96, h = 76,
             parts = {
@@ -104,10 +96,7 @@ local function buildEspPanel(kind)
             skHead = { 0.09, 0.5 },
         } or {
             w = 96, h = 132,
-            parts = originalPose and {
-                { 32, 5, 32, 30, 9 }, { 3, 36, 90, 46, 4 },
-                { 25, 84, 23, 46, 4 }, { 48, 84, 23, 46, 4 },
-            } or {
+            parts = {
                 { 33, 2, 30, 26, 9 },                              -- cabeça
                 { 26, 32, 44, 42, 5 },                             -- tronco
                 { 12, 32, 12, 22, 4 }, { 12, 54, 12, 20, 4 }, { 12, 74, 12, 10, 3 },   -- braço esquerdo
@@ -124,11 +113,6 @@ local function buildEspPanel(kind)
         }
         local fg = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(CX, CY), Size = UDim2.fromOffset(POSE.w, POSE.h), BackgroundTransparency = 1 }, cv)
         local fgScale = new("UIScale", { Scale = 1 }, fg)
-        local hlFill
-        if originalPose then
-            hlFill = new("Frame", { Size = UDim2.fromScale(1, 1), BorderSizePixel = 0 }, fg)
-            new("UICorner", { CornerRadius = UDim.new(0, 2) }, hlFill)
-        end
         local parts = {}   -- { f = frame, st = stroke } (silhueta preenchida = chams)
         local function part(x, y, w, h, radius)
             local p = new("Frame", { Position = UDim2.fromOffset(x, y), Size = UDim2.fromOffset(w, h), BackgroundTransparency = 1, BorderSizePixel = 0 }, fg)
@@ -219,26 +203,22 @@ local function buildEspPanel(kind)
             farDot.BackgroundColor3 = nearColor or S.box.color
             -- o tamanho do boneco muda com a distância simulada
             local sc = math.clamp((80 / math.max(d, 20)) ^ 0.55, 0.28, 1.1)
-            if Library.ReduceMotion then fgScale.Scale = sc else TweenService:Create(fgScale, TweenInfo.new(0.15, Enum.EasingStyle.Quad), { Scale = sc }):Play() end
+            -- Evita desenho e rótulos fora de sincronia durante alterações rápidas.
+            fgScale.Scale = sc
             local bw, bh = POSE.w * sc, POSE.h * sc
             local left, right, top, bottom = CX - bw / 2, CX + bw / 2, CY - bh / 2, CY + bh / 2
             shadow.Size = UDim2.fromOffset(bw * 1.45, math.max(12, 22 * sc)); at(shadow, CX, bottom + 3)
             -- chams: silhueta blocuda preenchida (laranja/vermelho) com contorno escuro fino
             local hl = S.highlight
-            local lineCol = hl.on and (nearColor or hl.color):Lerp(Color3.new(1, 1, 1), 0.4) or Library.Theme.Muted
-            if hlFill then
-                hlFill.Visible = hl.on; hlFill.BackgroundColor3 = nearColor or hl.color
-                hlFill.BackgroundTransparency = 1 - hl.alpha * (inRange and 1 or 0.35)
-            end
             for _, p in ipairs(parts) do
                 p.f.BackgroundColor3 = nearColor or hl.color
-                p.f.BackgroundTransparency = originalPose and 1 or (hl.on and (1 - hl.alpha * (inRange and 1 or 0.35)) or 1)
-                p.st.Color = originalPose and lineCol or (hl.outlineColor or Library.Theme.Muted)
+                p.f.BackgroundTransparency = hl.on and (1 - hl.alpha * (inRange and 1 or 0.35)) or 1
+                p.st.Color = hl.outlineColor or Library.Theme.Muted
                 p.st.Thickness = hl.on and math.max(hl.outline * 0.5, 0.5) or 1
-                p.st.Transparency = originalPose and (inRange and 0.3 or 0.75) or (hl.on and hl.outline > 0 and 0 or 1)
+                p.st.Transparency = hl.on and hl.outline > 0 and 0 or 1
             end
             if torsoText then
-                torsoText.TextColor3 = originalPose and lineCol or (hl.on and Color3.new(1, 1, 1) or Library.Theme.Text)
+                torsoText.TextColor3 = hl.on and Color3.new(1, 1, 1) or Library.Theme.Text
                 torsoText.TextTransparency = inRange and 0.1 or 0.7
             end
             -- esqueleto
@@ -246,11 +226,11 @@ local function buildEspPanel(kind)
             local showSk = sk.on and details
             for i, seg in ipairs(POSE.sk) do
                 local ln = skLines[i]
-                ln.Visible = showSk; ln.BackgroundColor3 = sk.color
+                ln.Visible = showSk; ln.BackgroundColor3 = nearColor or sk.color
                 line(ln, left + seg[1] * bw, top + seg[2] * bh, left + seg[3] * bw, top + seg[4] * bh, sk.thick)
             end
             if POSE.skHead then
-                skHead.Visible = showSk; skHeadStroke.Color = sk.color; skHeadStroke.Thickness = sk.thick
+                skHead.Visible = showSk; skHeadStroke.Color = nearColor or sk.color; skHeadStroke.Thickness = sk.thick
                 local skr = math.min(bw, bh) * 0.3
                 skHead.Size = UDim2.fromOffset(skr, skr)
                 at(skHead, left + POSE.skHead[1] * bw, top + POSE.skHead[2] * bh)
@@ -289,7 +269,7 @@ local function buildEspPanel(kind)
             distL.Visible = S.distance.on and inRange; distL.TextColor3 = S.distance.color; distL.TextSize = ts
             distL.Text = S.distance.unit == "m" and (d .. "m") or (math.floor(d / 0.28) .. " st"); at(distL, CX, far and (CY + 6) or (bottom + 3))
             -- linha (tracer) do ponto de origem até a caixa
-            tracer.Visible = S.tracers.on and details; tracer.BackgroundColor3 = S.tracers.color
+            tracer.Visible = S.tracers.on and inRange; tracer.BackgroundColor3 = nearColor or S.tracers.color
             if S.tracers.origin == "Baixo" then line(tracer, CX, CVH, CX, bottom + 16, S.tracers.thick) else line(tracer, CX, 0, CX, top - 20, S.tracers.thick) end
             arrow.Visible = S.arrows.on; arrow.ImageColor3 = S.arrows.color; arrow.Size = UDim2.fromOffset(S.arrows.size, S.arrows.size)
             oorL.Visible = not inRange
@@ -441,7 +421,7 @@ local combate = Window:Tab({ Name = "COMBATE", Icon = "crosshair" })
 g = combate:Groupbox({ Name = "MIRA", Icon = "crosshair", Side = "Left", Checkbox = true, Default = false,
     CanSet = function(v)
         if Library.Safety:allow("MIRA", v) then return true end
-        notify("Bloqueado pelo modo preventivo: MIRA")
+        notify("Indisponível durante o modo pânico: MIRA")
         return false
     end,
     Callback = function(v) Actions.COMBAT.on = v; Actions.applyAimState() end })
@@ -532,7 +512,7 @@ end
 -- ---------------- EXTRAS ----------------
 local extras = Window:Tab({ Name = "EXTRAS", Icon = "layout-grid" })
 g = extras:Groupbox({ Name = "EXTRAS", Icon = "layout-grid", Side = "Left" })
-T(g, "Troca rápida"); T(g, "Modo pânico"); g:Button({ Name = "Atravessar porta", Callback = function() if Library.Safety:allow("Atravessar porta", true) then Actions.noclipPulse() else notify("Bloqueado pelo modo preventivo.") end end })
+T(g, "Troca rápida"); T(g, "Modo pânico"); g:Button({ Name = "Atravessar porta", Callback = function() if Library.Safety:allow("Atravessar porta", true) then Actions.noclipPulse() else notify("Indisponível durante o modo pânico.") end end })
 T(g, "Remover efeitos"); T(g, "Avisos de denúncias", true); T(g, "Avisos de entrada")
 g = extras:Groupbox({ Name = "SONS", Icon = "volume-2", Side = "Left" })
 g:Input({ Name = "Adicionar ID de som", Placeholder = "ID", Callback = function(v) Actions.setSoundId(v) end })
@@ -934,7 +914,6 @@ do
         if ok then name.Box.Text = result; refreshConfigs(); notify(tr("Cópia criada; revise antes de carregar") .. ": " .. result)
         else notify(tr("Não foi possível recuperar a versão") .. ": " .. tostring(result)) end
     end })
-    box:Label({ Text = "O bloqueio preventivo continua ativo ao iniciar." })
     refreshConfigs()
 end
 
@@ -945,10 +924,6 @@ do
         Tooltip = tipText("Esconde menu, ESP, radar e botões fixos de uma vez. Para voltar, toque 3 vezes no topo da tela (ou use a tecla de pânico)."),
         Callback = function(v) Window:SetPanic(v) end })
     P:Keybind({ Name = "Tecla de pânico", Default = "End", Callback = function() Window:SetPanic(not Library.Panic) end })
-    P:Toggle({ Name = "Bloqueio preventivo", Default = true, NoPersist = true, NoSave = true,
-        Tooltip = tipText("Bloqueia uma lista de opções de maior risco, sem detectar o anticheat do jogo. Não garante segurança."),
-        Callback = function(v) Library.Safety:setEnabled(v) end })
-
 end
 
 -- Geral
@@ -987,7 +962,6 @@ do
     local integration = panel:Label({ Text = "" })
     local reload = panel:Label({ Text = "" })
     local prompt = panel:Label({ Text = "" })
-    local policy = panel:Label({ Text = "" })
     local engineTiming = panel:Label({ Text = "" })
     local startupState = panel:Label({ Text = "" })
     local storageState = panel:Label({ Text = "" })
@@ -1007,7 +981,6 @@ do
         integration:Set(tr("Saque configurado") .. ": " .. tr(Actions.getLootConfig() and "Sim" or "Não"))
         reload:Set(tr("Recarga configurada") .. ": " .. tr(Actions.getReloadPath() and "Sim" or "Não"))
         prompt:Set(tr("API de prompt") .. ": " .. tr(type(fireproximityprompt) == "function" and "APIs presentes" or "APIs ausentes"))
-        policy:Set(tr("Bloqueio preventivo") .. ": " .. tr(Library.Safety.enabled and "Ligado" or "Desligado"))
         startupState:Set(tr("Montagem") .. ": " .. tr(Window._prebuildFailed and "Falhou" or (Window._loaded and "Concluída" or "Pendente")))
         storageState:Set(tr("Salvamento automático") .. ": " .. tr(Window._autoSaveBlocked and "Suspenso" or (Window._ready and "Disponível" or "Pendente")))
         local timing = Library.Diagnostics.engine

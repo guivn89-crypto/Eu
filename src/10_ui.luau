@@ -288,7 +288,7 @@ function Window:_snapshot()
 end
 function Window:_applyData(decoded)
     local policy = Library.Safety
-    local blocked = (policy and (policy.enabled or policy.panic)) and policy.blocked or {}
+    local blocked = (policy and policy.panic) and policy.blocked or {}
     local operations, err, skipped, unknown = Library.ProfileGuard:prepare(decoded, Library.Registry, blocked)
     if not operations then return false, err end
     local ok, key = Library.ProfileGuard:apply(operations)
@@ -416,10 +416,10 @@ function Window:PreviewConfig(name)
     local decoded = ok and decodeProfile(raw)
     if not decoded then return nil, "perfil ausente, inválido ou grande demais" end
     local policy = Library.Safety
-    local blocked = (policy and (policy.enabled or policy.panic)) and policy.blocked or {}
+    local blocked = (policy and policy.panic) and policy.blocked or {}
     local operations, err, skipped, unknown = Library.ProfileGuard:prepare(decoded, Library.Registry, blocked)
     if not operations then return nil, err end
-    local changes, fingerprint = {}, { skipped = skipped, unknown = unknown, enabled = policy and policy.enabled == true, panic = policy and policy.panic == true, blocked = blocked, operations = {} }
+    local changes, fingerprint = {}, { skipped = skipped, unknown = unknown, panic = policy and policy.panic == true, blocked = blocked, operations = {} }
     local function display(v)
         if v == nil then return "—" end
         if type(v) == "table" then
@@ -480,7 +480,7 @@ function Window:RestoreConfigBackup(name)
     local decoded = ok and decodeProfile(raw)
     if not decoded then return false, "backup ausente ou inválido" end
     local policy = Library.Safety
-    local blocked = (policy and (policy.enabled or policy.panic)) and policy.blocked or {}
+    local blocked = (policy and policy.panic) and policy.blocked or {}
     local operations, err = Library.ProfileGuard:prepare(decoded, Library.Registry, blocked)
     if not operations then return false, err end
     local recovery
@@ -537,7 +537,7 @@ function Window:RestoreConfigVersion(name, version)
     local decoded = ok and decodeProfile(raw)
     if not decoded then return false, "versão inválida ou ausente" end
     local policy = Library.Safety
-    local blocked = (policy and (policy.enabled or policy.panic)) and policy.blocked or {}
+    local blocked = (policy and policy.panic) and policy.blocked or {}
     local operations, err = Library.ProfileGuard:prepare(decoded, Library.Registry, blocked)
     if not operations then return false, err end
     for i = 1, 99 do

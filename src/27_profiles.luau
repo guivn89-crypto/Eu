@@ -38,6 +38,13 @@ function Library.ProfileGuard:prepare(decoded, registry, blocked)
         if type(key) ~= "string" then return nil, "chave de perfil inválida" end
         local entry = registry[key]
         if entry then
+            -- O contorno do ESP era booleano em perfis anteriores e agora é
+            -- slider. Migra somente as seis chaves conhecidas, sem alterar o arquivo.
+            if type(value) == "boolean" and string.match(key, "^VISUAIS/ESP/[^/]+/painel/sub2/Contorno$") then
+                local kind = string.match(key, "^VISUAIS/ESP/([^/]+)/")
+                local espKinds = { Jogador = true, NPCs = true, Corpo = true, Recipiente = true, ["Item no chão"] = true, ["Itens de missão"] = true }
+                if espKinds[kind] then value = value and 1.5 or 0 end
+            end
             local ok, current = pcall(entry.get)
             if not ok then return nil, "não foi possível ler uma opção" end
             if entry.validate then

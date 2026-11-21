@@ -1,7 +1,6 @@
--- Bloqueio preventivo baseado em uma lista explícita, NÃO detecção de anticheat.
--- O bloqueio também vale para atalhos e perfis importados via controles :Set().
+-- Controles rastreados apenas para interrupção por pânico, erro ou respawn.
+-- Não há bloqueio preventivo automático nem detecção de anticheat.
 Library.Safety = {
-    enabled = true,
     blocked = {
         ["MIRA"] = true, ["Hack de velocidade"] = true, ["Sprint automático"] = true,
         ["Pulos seguidos"] = true, ["Controle no ar"] = true, ["Voar"] = true,
@@ -19,8 +18,7 @@ Library.Safety = {
 }
 function Library.Safety:allow(name, value)
     if value ~= true then return true end
-    if self.panic and self.blocked[name] then return false end
-    return not self.enabled or not self.blocked[name]
+    return not (self.panic and self.blocked[name])
 end
 function Library.Safety:track(name, control)
     self.controls[#self.controls + 1] = { name = name, control = control }
@@ -44,13 +42,8 @@ function Library.Safety:disableTracked()
     end
     for _, stop in ipairs(self.stoppers) do pcall(stop) end
 end
-function Library.Safety:setEnabled(value)
-    self.enabled = value == true
-    if self.enabled then self:disableTracked() end
-end
-
--- Segunda checagem na entrada das ações, além da validação do menu.
--- A lista continua sendo uma política local, não um detector de anticheat.
+-- Impede reativação durante pânico e chamadas após encerramento. Não bloqueia
+-- ações durante uso normal; dados por jogo continuam sujeitos à validação.
 function Library.Safety:guardActions(actions, isAlive)
     for name, callback in pairs(actions) do
         if self.blocked[name] and type(callback) == "function" then

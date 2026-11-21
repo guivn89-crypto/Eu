@@ -47,3 +47,19 @@ target.model.Parent=false
 processKind('Jogador', settings, camera, {}, false)
 assert(pool.Jogador[target.model] == nil, 'removed models must be destroyed')
 print('ESP stable rig offsets, frame projection, throttling and cleanup OK')
+-- Uma câmera inclinada não deve fazer os extremos saírem do plano da tela.
+local V = {}
+V.__index = V
+function V.__add(a,b) return setmetatable({x=a.x+b.x,y=a.y+b.y,z=a.z+b.z}, V) end
+function V.__sub(a,b) return setmetatable({x=a.x-b.x,y=a.y-b.y,z=a.z-b.z}, V) end
+function V.__mul(a,b) return setmetatable({x=a.x*b,y=a.y*b,z=a.z*b}, V) end
+local center = setmetatable({x=10,y=20,z=30}, V)
+local up = setmetatable({x=0.3,y=0.4,z=0.5}, V)
+local projections = {}
+local tilted = {CFrame={UpVector=up}}
+function tilted:WorldToViewportPoint(v) projections[#projections+1]=v; return v end
+local top, bottom = projectBounds(tilted, center, 2, 3)
+assert(math.abs(top.x - 10.6)<1e-6 and math.abs(top.z - 31)<1e-6)
+assert(math.abs(bottom.x - 9.1)<1e-6 and math.abs(bottom.z - 28.5)<1e-6)
+assert(#projections == 2)
+print('camera aligned projection uses camera up vector')

@@ -2494,7 +2494,7 @@ function Container:Toggle(opts)
         if opts.Disabled then return "pending" end
         if opts.Premium and Library.Access ~= "VIP" then return "vip" end
         local policy = Library.Safety
-        if policy and policy.blocked[opts.Name] and (policy.enabled or policy.panic) then return "blocked" end
+        if policy and policy.blocked[opts.Name] and policy.panic then return "blocked" end
         return state
     end
     local function tipDescription()
@@ -2505,7 +2505,7 @@ function Container:Toggle(opts)
             if type(e) == "string" then tip = e elseif e then tip = (tipFor and tipFor(opts.Name)) or e.pt end
         end
         local status = tipStatus()
-        local reason = status == "pending" and "Indisponível: implementação pendente." or status == "vip" and "Recurso exclusivo VIP." or status == "blocked" and "Bloqueado pelo modo preventivo." or nil
+        local reason = status == "pending" and "Indisponível: implementação pendente." or status == "vip" and "Recurso exclusivo VIP." or status == "blocked" and "Indisponível durante o modo pânico." or nil
         return (tip and tostring(tip) or "") .. (reason and ("\n" .. Library.Tr(reason)) or "")
     end
     if Library.Favorites and not opts.NoSave then
@@ -3417,7 +3417,7 @@ function Window:_snapshot()
 end
 function Window:_applyData(decoded)
     local policy = Library.Safety
-    local blocked = (policy and (policy.enabled or policy.panic)) and policy.blocked or {}
+    local blocked = (policy and policy.panic) and policy.blocked or {}
     local operations, err, skipped, unknown = Library.ProfileGuard:prepare(decoded, Library.Registry, blocked)
     if not operations then return false, err end
     local ok, key = Library.ProfileGuard:apply(operations)
@@ -3545,10 +3545,10 @@ function Window:PreviewConfig(name)
     local decoded = ok and decodeProfile(raw)
     if not decoded then return nil, "perfil ausente, inválido ou grande demais" end
     local policy = Library.Safety
-    local blocked = (policy and (policy.enabled or policy.panic)) and policy.blocked or {}
+    local blocked = (policy and policy.panic) and policy.blocked or {}
     local operations, err, skipped, unknown = Library.ProfileGuard:prepare(decoded, Library.Registry, blocked)
     if not operations then return nil, err end
-    local changes, fingerprint = {}, { skipped = skipped, unknown = unknown, enabled = policy and policy.enabled == true, panic = policy and policy.panic == true, blocked = blocked, operations = {} }
+    local changes, fingerprint = {}, { skipped = skipped, unknown = unknown, panic = policy and policy.panic == true, blocked = blocked, operations = {} }
     local function display(v)
         if v == nil then return "—" end
         if type(v) == "table" then
@@ -3609,7 +3609,7 @@ function Window:RestoreConfigBackup(name)
     local decoded = ok and decodeProfile(raw)
     if not decoded then return false, "backup ausente ou inválido" end
     local policy = Library.Safety
-    local blocked = (policy and (policy.enabled or policy.panic)) and policy.blocked or {}
+    local blocked = (policy and policy.panic) and policy.blocked or {}
     local operations, err = Library.ProfileGuard:prepare(decoded, Library.Registry, blocked)
     if not operations then return false, err end
     local recovery
@@ -3666,7 +3666,7 @@ function Window:RestoreConfigVersion(name, version)
     local decoded = ok and decodeProfile(raw)
     if not decoded then return false, "versão inválida ou ausente" end
     local policy = Library.Safety
-    local blocked = (policy and (policy.enabled or policy.panic)) and policy.blocked or {}
+    local blocked = (policy and policy.panic) and policy.blocked or {}
     local operations, err = Library.ProfileGuard:prepare(decoded, Library.Registry, blocked)
     if not operations then return false, err end
     for i = 1, 99 do
@@ -4970,7 +4970,7 @@ A prévia mostra apenas as primeiras 100 alterações.|The preview shows only th
 Mostra alterações sem aplicá-las; a prévia expira em 60 segundos.|Shows changes without applying them; preview expires in 60 seconds.|Muestra cambios sin aplicarlos; la vista previa vence en 60 segundos.|显示更改但不应用；预览在 60 秒后过期。|Показывает изменения без применения; срок действия предпросмотра — 60 секунд.
 Aplica a prévia se o arquivo, os ajustes e a política não mudaram.|Applies the preview if the file, settings and policy have not changed.|Aplica la vista previa si el archivo, los ajustes y la política no cambiaron.|如果文件、设置和策略未更改，则应用预览。|Применяет предпросмотр, если файл, настройки и политика не изменились.
 PENDENTE|PENDING|PENDIENTE|待实现|ОЖИДАЕТ
-Bloqueado pelo modo preventivo.|Blocked by preventive mode.|Bloqueado por el modo preventivo.|已被预防模式阻止。|Заблокировано превентивным режимом.
+Indisponível durante o modo pânico.|Unavailable during panic mode.|No disponible durante el modo pánico.|恐慌模式下不可用。|Недоступно в режиме паники.
 Cor/fundo|Color/background|Color/fondo|颜色/背景|Цвет/фон
 Branco/cor|White/color|Blanco/color|白色/颜色|Белый/цвет
 Contraste baixo em uma combinação.|Low contrast in one combination.|Contraste bajo en una combinación.|其中一种组合对比度较低。|Низкий контраст в одном сочетании.
@@ -5053,7 +5053,6 @@ Carregar configuração|Load configuration|Cargar configuración|加载配置|З
 Escolha um nome para salvar ou carregar os ajustes do menu.|Choose a name to save or load menu settings.|Elige un nombre para guardar o cargar los ajustes del menú.|选择名称以保存或加载菜单设置。|Выберите имя для сохранения или загрузки настроек меню.
 Salva os ajustes atuais e seleciona este arquivo para iniciar.|Saves current settings and selects this file at startup.|Guarda los ajustes actuales y selecciona este archivo al iniciar.|保存当前设置并选择此文件用于启动。|Сохраняет текущие настройки и выбирает файл для запуска.
 Carrega os ajustes salvos com este nome.|Loads the settings saved under this name.|Carga los ajustes guardados con este nombre.|加载以此名称保存的设置。|Загружает настройки, сохранённые под этим именем.
-O bloqueio preventivo continua ativo ao iniciar.|The preventive block remains active at startup.|El bloqueo preventivo sigue activo al iniciar.|启动时预防性阻止仍然有效。|Предупредительная блокировка остаётся активной при запуске.
 Salvo, mas não foi possível selecionar o carregamento inicial.|Saved, but startup loading could not be selected.|Guardado, pero no se pudo seleccionar la carga inicial.|已保存，但无法选择启动加载。|Сохранено, но не удалось выбрать загрузку при запуске.
 Carregado, mas não foi possível selecionar o carregamento inicial.|Loaded, but startup loading could not be selected.|Cargado, pero no se pudo seleccionar la carga inicial.|已加载，但无法选择启动加载。|Загружено, но не удалось выбрать загрузку при запуске.
 Zoom máximo|Maximum zoom|Zoom máximo|最大缩放|Максимальный зум
@@ -5248,7 +5247,6 @@ Pontos de saída|Exit points|Puntos de salida|撤离点|Точки выхода
 Radar|Radar|Radar|雷达|Радар
 Troca rápida|Quick swap|Cambio rápido|快速切换|Быстрая смена
 Modo pânico|Panic mode|Modo pánico|紧急模式|Режим паники
-Bloqueio preventivo|Preventive block|Bloqueo preventivo|预防性拦截|Превентивная блокировка
 Remover efeitos|Remove effects|Quitar efectos|移除特效|Убрать эффекты
 Avisos de entrada|Join alerts|Avisos de entrada|进入提醒|Уведомления о входе
 Criador|Creator|Creador|创作者|Создатель
@@ -5495,11 +5493,6 @@ local tipText = function(s)
     return e[currentLang] or s
 end
 for k, v in pairs({
-    ["Bloqueia uma lista de opções de maior risco, sem detectar o anticheat do jogo. Não garante segurança."] = {
-        en = "Blocks a list of higher-risk options without detecting the game's anti-cheat. It does not guarantee safety.",
-        es = "Bloquea una lista de opciones de mayor riesgo sin detectar el antitrampas del juego. No garantiza seguridad.",
-        zh = "阻止一系列风险较高的选项，但不会检测游戏的反作弊系统，也无法保证安全。",
-        ru = "Блокирует список опций повышенного риска, не обнаруживая античит игры. Безопасность не гарантируется." },
     ["Longe, mostra só um ponto e a distância. Perto, mostra tudo."] = {
         en = "Far away shows only a dot and the distance. Close up, shows everything.",
         es = "Lejos muestra solo un punto y la distancia. De cerca, muestra todo.",
@@ -5748,10 +5741,9 @@ end
 function Library.StreamScan.start(root, alive, visit)
     task.spawn(function() Library.StreamScan.run(root, alive, visit) end)
 end
--- Bloqueio preventivo baseado em uma lista explícita, NÃO detecção de anticheat.
--- O bloqueio também vale para atalhos e perfis importados via controles :Set().
+-- Controles rastreados apenas para interrupção por pânico, erro ou respawn.
+-- Não há bloqueio preventivo automático nem detecção de anticheat.
 Library.Safety = {
-    enabled = true,
     blocked = {
         ["MIRA"] = true, ["Hack de velocidade"] = true, ["Sprint automático"] = true,
         ["Pulos seguidos"] = true, ["Controle no ar"] = true, ["Voar"] = true,
@@ -5769,8 +5761,7 @@ Library.Safety = {
 }
 function Library.Safety:allow(name, value)
     if value ~= true then return true end
-    if self.panic and self.blocked[name] then return false end
-    return not self.enabled or not self.blocked[name]
+    return not (self.panic and self.blocked[name])
 end
 function Library.Safety:track(name, control)
     self.controls[#self.controls + 1] = { name = name, control = control }
@@ -5794,13 +5785,8 @@ function Library.Safety:disableTracked()
     end
     for _, stop in ipairs(self.stoppers) do pcall(stop) end
 end
-function Library.Safety:setEnabled(value)
-    self.enabled = value == true
-    if self.enabled then self:disableTracked() end
-end
-
--- Segunda checagem na entrada das ações, além da validação do menu.
--- A lista continua sendo uma política local, não um detector de anticheat.
+-- Impede reativação durante pânico e chamadas após encerramento. Não bloqueia
+-- ações durante uso normal; dados por jogo continuam sujeitos à validação.
 function Library.Safety:guardActions(actions, isAlive)
     for name, callback in pairs(actions) do
         if self.blocked[name] and type(callback) == "function" then
@@ -5887,6 +5873,13 @@ function Library.ProfileGuard:prepare(decoded, registry, blocked)
         if type(key) ~= "string" then return nil, "chave de perfil inválida" end
         local entry = registry[key]
         if entry then
+            -- O contorno do ESP era booleano em perfis anteriores e agora é
+            -- slider. Migra somente as seis chaves conhecidas, sem alterar o arquivo.
+            if type(value) == "boolean" and string.match(key, "^VISUAIS/ESP/[^/]+/painel/sub2/Contorno$") then
+                local kind = string.match(key, "^VISUAIS/ESP/([^/]+)/")
+                local espKinds = { Jogador = true, NPCs = true, Corpo = true, Recipiente = true, ["Item no chão"] = true, ["Itens de missão"] = true }
+                if espKinds[kind] then value = value and 1.5 or 0 end
+            end
             local ok, current = pcall(entry.get)
             if not ok then return nil, "não foi possível ler uma opção" end
             if entry.validate then
@@ -9556,7 +9549,7 @@ local function T(tab, name, default, tip)
     if name == "Buscar chefes" then o.Warning = true end
     o.CanSet = function(v)
         if Library.Safety:allow(name, v) then return true end
-        notify("Bloqueado pelo modo preventivo: " .. name)
+        notify("Indisponível durante o modo pânico: " .. name)
         return false
     end
     local control = tab:Toggle(o)
@@ -9576,7 +9569,6 @@ end
 local function buildEspPanel(kind)
     return function(m)
         local B = Library.Bind
-        local TweenService = game:GetService("TweenService")
         local CVW, CVH, CX, CY = 212, 205, 106, 100
         local corpse = kind == "Corpo"
         local isProp = kind == "Recipiente" or kind == "Item no chão" or kind == "Itens de missão"
@@ -9596,12 +9588,6 @@ local function buildEspPanel(kind)
             lod = { on = true, near = 150 }, nearest = { on = false, color = Color3.fromRGB(255, 60, 60) },
             maxDist = 1000, textSize = 11, prevDist = 120, prevHp = (corpse or isProp) and 0 or 100,
         }
-        if kind == "Jogador" or kind == "NPCs" then
-            S.highlight.color, S.highlight.alpha, S.highlight.outline, S.highlight.outlineColor = Color3.fromRGB(40, 200, 170), 0.5, 2, nil
-            S.box.color, S.box.thick, S.box.style = Color3.fromRGB(80, 150, 255), 2, "Cantos"
-            S.name.color = Color3.fromRGB(255, 120, 150)
-            S.healthbar.auto, S.health.on = true, true
-        end
         S.kdr = { on = false }; S.reports = { on = false }
         S.arrows = { on = false, color = Color3.fromRGB(255, 90, 90), size = 18 }
         Library.ESP = Library.ESP or {}
@@ -9646,7 +9632,6 @@ local function buildEspPanel(kind)
 
         -- boneco em silhueta: blocos separados (cabeça, tronco, braços, pernas e
         -- pés), como um avatar blocudo. O "Corpo" usa a pose caída (deitado).
-        local originalPose = kind == "Jogador" or kind == "NPCs"
         local POSE = isProp and {
             w = 96, h = 76,
             parts = {
@@ -9672,10 +9657,7 @@ local function buildEspPanel(kind)
             skHead = { 0.09, 0.5 },
         } or {
             w = 96, h = 132,
-            parts = originalPose and {
-                { 32, 5, 32, 30, 9 }, { 3, 36, 90, 46, 4 },
-                { 25, 84, 23, 46, 4 }, { 48, 84, 23, 46, 4 },
-            } or {
+            parts = {
                 { 33, 2, 30, 26, 9 },                              -- cabeça
                 { 26, 32, 44, 42, 5 },                             -- tronco
                 { 12, 32, 12, 22, 4 }, { 12, 54, 12, 20, 4 }, { 12, 74, 12, 10, 3 },   -- braço esquerdo
@@ -9692,11 +9674,6 @@ local function buildEspPanel(kind)
         }
         local fg = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(CX, CY), Size = UDim2.fromOffset(POSE.w, POSE.h), BackgroundTransparency = 1 }, cv)
         local fgScale = new("UIScale", { Scale = 1 }, fg)
-        local hlFill
-        if originalPose then
-            hlFill = new("Frame", { Size = UDim2.fromScale(1, 1), BorderSizePixel = 0 }, fg)
-            new("UICorner", { CornerRadius = UDim.new(0, 2) }, hlFill)
-        end
         local parts = {}   -- { f = frame, st = stroke } (silhueta preenchida = chams)
         local function part(x, y, w, h, radius)
             local p = new("Frame", { Position = UDim2.fromOffset(x, y), Size = UDim2.fromOffset(w, h), BackgroundTransparency = 1, BorderSizePixel = 0 }, fg)
@@ -9787,26 +9764,22 @@ local function buildEspPanel(kind)
             farDot.BackgroundColor3 = nearColor or S.box.color
             -- o tamanho do boneco muda com a distância simulada
             local sc = math.clamp((80 / math.max(d, 20)) ^ 0.55, 0.28, 1.1)
-            if Library.ReduceMotion then fgScale.Scale = sc else TweenService:Create(fgScale, TweenInfo.new(0.15, Enum.EasingStyle.Quad), { Scale = sc }):Play() end
+            -- Evita desenho e rótulos fora de sincronia durante alterações rápidas.
+            fgScale.Scale = sc
             local bw, bh = POSE.w * sc, POSE.h * sc
             local left, right, top, bottom = CX - bw / 2, CX + bw / 2, CY - bh / 2, CY + bh / 2
             shadow.Size = UDim2.fromOffset(bw * 1.45, math.max(12, 22 * sc)); at(shadow, CX, bottom + 3)
             -- chams: silhueta blocuda preenchida (laranja/vermelho) com contorno escuro fino
             local hl = S.highlight
-            local lineCol = hl.on and (nearColor or hl.color):Lerp(Color3.new(1, 1, 1), 0.4) or Library.Theme.Muted
-            if hlFill then
-                hlFill.Visible = hl.on; hlFill.BackgroundColor3 = nearColor or hl.color
-                hlFill.BackgroundTransparency = 1 - hl.alpha * (inRange and 1 or 0.35)
-            end
             for _, p in ipairs(parts) do
                 p.f.BackgroundColor3 = nearColor or hl.color
-                p.f.BackgroundTransparency = originalPose and 1 or (hl.on and (1 - hl.alpha * (inRange and 1 or 0.35)) or 1)
-                p.st.Color = originalPose and lineCol or (hl.outlineColor or Library.Theme.Muted)
+                p.f.BackgroundTransparency = hl.on and (1 - hl.alpha * (inRange and 1 or 0.35)) or 1
+                p.st.Color = hl.outlineColor or Library.Theme.Muted
                 p.st.Thickness = hl.on and math.max(hl.outline * 0.5, 0.5) or 1
-                p.st.Transparency = originalPose and (inRange and 0.3 or 0.75) or (hl.on and hl.outline > 0 and 0 or 1)
+                p.st.Transparency = hl.on and hl.outline > 0 and 0 or 1
             end
             if torsoText then
-                torsoText.TextColor3 = originalPose and lineCol or (hl.on and Color3.new(1, 1, 1) or Library.Theme.Text)
+                torsoText.TextColor3 = hl.on and Color3.new(1, 1, 1) or Library.Theme.Text
                 torsoText.TextTransparency = inRange and 0.1 or 0.7
             end
             -- esqueleto
@@ -9814,11 +9787,11 @@ local function buildEspPanel(kind)
             local showSk = sk.on and details
             for i, seg in ipairs(POSE.sk) do
                 local ln = skLines[i]
-                ln.Visible = showSk; ln.BackgroundColor3 = sk.color
+                ln.Visible = showSk; ln.BackgroundColor3 = nearColor or sk.color
                 line(ln, left + seg[1] * bw, top + seg[2] * bh, left + seg[3] * bw, top + seg[4] * bh, sk.thick)
             end
             if POSE.skHead then
-                skHead.Visible = showSk; skHeadStroke.Color = sk.color; skHeadStroke.Thickness = sk.thick
+                skHead.Visible = showSk; skHeadStroke.Color = nearColor or sk.color; skHeadStroke.Thickness = sk.thick
                 local skr = math.min(bw, bh) * 0.3
                 skHead.Size = UDim2.fromOffset(skr, skr)
                 at(skHead, left + POSE.skHead[1] * bw, top + POSE.skHead[2] * bh)
@@ -9857,7 +9830,7 @@ local function buildEspPanel(kind)
             distL.Visible = S.distance.on and inRange; distL.TextColor3 = S.distance.color; distL.TextSize = ts
             distL.Text = S.distance.unit == "m" and (d .. "m") or (math.floor(d / 0.28) .. " st"); at(distL, CX, far and (CY + 6) or (bottom + 3))
             -- linha (tracer) do ponto de origem até a caixa
-            tracer.Visible = S.tracers.on and details; tracer.BackgroundColor3 = S.tracers.color
+            tracer.Visible = S.tracers.on and inRange; tracer.BackgroundColor3 = nearColor or S.tracers.color
             if S.tracers.origin == "Baixo" then line(tracer, CX, CVH, CX, bottom + 16, S.tracers.thick) else line(tracer, CX, 0, CX, top - 20, S.tracers.thick) end
             arrow.Visible = S.arrows.on; arrow.ImageColor3 = S.arrows.color; arrow.Size = UDim2.fromOffset(S.arrows.size, S.arrows.size)
             oorL.Visible = not inRange
@@ -10009,7 +9982,7 @@ local combate = Window:Tab({ Name = "COMBATE", Icon = "crosshair" })
 g = combate:Groupbox({ Name = "MIRA", Icon = "crosshair", Side = "Left", Checkbox = true, Default = false,
     CanSet = function(v)
         if Library.Safety:allow("MIRA", v) then return true end
-        notify("Bloqueado pelo modo preventivo: MIRA")
+        notify("Indisponível durante o modo pânico: MIRA")
         return false
     end,
     Callback = function(v) Actions.COMBAT.on = v; Actions.applyAimState() end })
@@ -10100,7 +10073,7 @@ end
 -- ---------------- EXTRAS ----------------
 local extras = Window:Tab({ Name = "EXTRAS", Icon = "layout-grid" })
 g = extras:Groupbox({ Name = "EXTRAS", Icon = "layout-grid", Side = "Left" })
-T(g, "Troca rápida"); T(g, "Modo pânico"); g:Button({ Name = "Atravessar porta", Callback = function() if Library.Safety:allow("Atravessar porta", true) then Actions.noclipPulse() else notify("Bloqueado pelo modo preventivo.") end end })
+T(g, "Troca rápida"); T(g, "Modo pânico"); g:Button({ Name = "Atravessar porta", Callback = function() if Library.Safety:allow("Atravessar porta", true) then Actions.noclipPulse() else notify("Indisponível durante o modo pânico.") end end })
 T(g, "Remover efeitos"); T(g, "Avisos de denúncias", true); T(g, "Avisos de entrada")
 g = extras:Groupbox({ Name = "SONS", Icon = "volume-2", Side = "Left" })
 g:Input({ Name = "Adicionar ID de som", Placeholder = "ID", Callback = function(v) Actions.setSoundId(v) end })
@@ -10502,7 +10475,6 @@ do
         if ok then name.Box.Text = result; refreshConfigs(); notify(tr("Cópia criada; revise antes de carregar") .. ": " .. result)
         else notify(tr("Não foi possível recuperar a versão") .. ": " .. tostring(result)) end
     end })
-    box:Label({ Text = "O bloqueio preventivo continua ativo ao iniciar." })
     refreshConfigs()
 end
 
@@ -10513,10 +10485,6 @@ do
         Tooltip = tipText("Esconde menu, ESP, radar e botões fixos de uma vez. Para voltar, toque 3 vezes no topo da tela (ou use a tecla de pânico)."),
         Callback = function(v) Window:SetPanic(v) end })
     P:Keybind({ Name = "Tecla de pânico", Default = "End", Callback = function() Window:SetPanic(not Library.Panic) end })
-    P:Toggle({ Name = "Bloqueio preventivo", Default = true, NoPersist = true, NoSave = true,
-        Tooltip = tipText("Bloqueia uma lista de opções de maior risco, sem detectar o anticheat do jogo. Não garante segurança."),
-        Callback = function(v) Library.Safety:setEnabled(v) end })
-
 end
 
 -- Geral
@@ -10555,7 +10523,6 @@ do
     local integration = panel:Label({ Text = "" })
     local reload = panel:Label({ Text = "" })
     local prompt = panel:Label({ Text = "" })
-    local policy = panel:Label({ Text = "" })
     local engineTiming = panel:Label({ Text = "" })
     local startupState = panel:Label({ Text = "" })
     local storageState = panel:Label({ Text = "" })
@@ -10575,7 +10542,6 @@ do
         integration:Set(tr("Saque configurado") .. ": " .. tr(Actions.getLootConfig() and "Sim" or "Não"))
         reload:Set(tr("Recarga configurada") .. ": " .. tr(Actions.getReloadPath() and "Sim" or "Não"))
         prompt:Set(tr("API de prompt") .. ": " .. tr(type(fireproximityprompt) == "function" and "APIs presentes" or "APIs ausentes"))
-        policy:Set(tr("Bloqueio preventivo") .. ": " .. tr(Library.Safety.enabled and "Ligado" or "Desligado"))
         startupState:Set(tr("Montagem") .. ": " .. tr(Window._prebuildFailed and "Falhou" or (Window._loaded and "Concluída" or "Pendente")))
         storageState:Set(tr("Salvamento automático") .. ": " .. tr(Window._autoSaveBlocked and "Suspenso" or (Window._ready and "Disponível" or "Pendente")))
         local timing = Library.Diagnostics.engine
@@ -10949,6 +10915,11 @@ do
         end
         return math.max(above, 1.5), math.max(below, 1.5)
     end
+    local function projectBounds(c, center, above, below)
+        -- Os extremos ficam no plano da tela e à mesma profundidade da raiz.
+        local up = c.CFrame.UpVector
+        return c:WorldToViewportPoint(center + up * above), c:WorldToViewportPoint(center - up * below)
+    end
     local function drawTarget(d, t, S, c, vp, isNearest)
         local near = isNearest and S.nearest.on
         local ncol = S.nearest.color
@@ -10960,8 +10931,7 @@ do
             local sz = t.model:IsA("Model") and t.model:GetExtentsSize() or t.model.Size
             center, above, below = t.model:GetPivot().Position, sz.Y / 2, sz.Y / 2
         end
-        local topV = c:WorldToViewportPoint(center + Vector3.new(0, above, 0))
-        local botV = c:WorldToViewportPoint(center - Vector3.new(0, below, 0))
+        local topV, botV = projectBounds(c, center, above, below)
         d.root.Visible = true
         -- esconde tudo; só reaparece o que estiver ligado
         d.boxFull.Visible = false
@@ -11043,7 +11013,13 @@ do
             if S.health.on and t.hum then
                 d.hp.Visible = true; d.hp.Text = tostring(math.floor(t.hum.Health)); d.hp.TextSize = ts
                 d.hp.TextColor3 = S.healthbar.auto and hpColor(S, ratio) or S.health.color
-                d.hp.Position = UDim2.fromOffset(left - 5 - (S.healthbar.on and S.healthbar.width or 0), top)
+                if S.healthbar.side == "Direita" then
+                    d.hp.AnchorPoint = Vector2.new(0, 0.5); d.hp.TextXAlignment = Enum.TextXAlignment.Left
+                    d.hp.Position = UDim2.fromOffset(left + wid + 7 + (S.healthbar.on and S.healthbar.width or 0), top + hgt / 2)
+                else
+                    d.hp.AnchorPoint = Vector2.new(1, 0.5); d.hp.TextXAlignment = Enum.TextXAlignment.Right
+                    d.hp.Position = UDim2.fromOffset(left - 7 - (S.healthbar.on and S.healthbar.width or 0), top + hgt / 2)
+                end
             end
             if S.name.on then
                 d.name.Visible = true; d.name.Text = t.name; d.name.TextSize = ts; d.name.TextColor3 = S.name.color

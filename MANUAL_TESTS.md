@@ -13,8 +13,8 @@ Não há teste aqui que prove invisibilidade ou ausência de detecção.
   e no celular; um link fixado em commit anterior não recebe a correção nova. Guarde logs sem credenciais, IDs privados ou dados de terceiros.
 - Faça cópia de `BBC_HUB/configs` e `BBC_HUB/autoload.txt` antes dos testes.
   Use arquivos novos e nomes de teste, sem substituir configurações pessoais.
-- Confira que o bloqueio preventivo inicia ligado. Não o desligue para testar
-  ações de risco fora de um ambiente controlado e expressamente autorizado.
+- O bloqueio preventivo foi removido. Teste apenas em ambiente controlado e
+  autorizado; perfis salvos podem reativar funções. Não há proteção anticheat.
 
 ## PC: mouse e teclado
 
@@ -22,7 +22,7 @@ Não há teste aqui que prove invisibilidade ou ausência de detecção.
 - [ ] Ajustar escala em 70%, 100% e 130%; verificar que o menu cabe na tela.
 - [ ] Alterar tema/idioma e conferir textos, tooltips e o painel de diagnóstico.
 - [ ] Salvar uma configuração de teste, alterar valores, carregar e reiniciar.
-      Verificar o nome ativo, opções bloqueadas e avisos de dados desconhecidos.
+      Verificar o nome ativo, ações habilitadas e avisos de dados desconhecidos.
 - [ ] Gerar backup ao salvar duas vezes, usar **Recuperar backup** e confirmar
       que `-recN` é criado e que o original e `.bak` não são alterados.
 - [ ] Testar nome ocupado, backup inválido, `listfiles` indisponível e falha de
@@ -73,7 +73,7 @@ e compilação Luau não substituem este roteiro nem validam regras do servidor.
 
 - Buscar em português, inglês, espanhol, russo (maiúsculas/minúsculas) e chinês; tocar resultados em abas normais, CONFIGURAÇÕES e painéis ESP, conferir rolagem, lista vazia e limite de 40.
 - No toque e em orientação retrato, confirmar coluna única, ordem dos grupos, acesso aos submenus e rolagem; girar de volta e conferir restauração das duas colunas. Verificar áreas de toque, modais e sobreposições.
-- Revisar um perfil com alterações, mais de 100 alterações e opções bloqueadas; conferir todas as páginas, resumo e confirmar separadamente. Alterar o arquivo, a política e um ajuste entre revisão e confirmação; verificar recusa. Conferir expiração, nome diferente, rollback e autoload/recuperação.
+- Revisar um perfil com alterações, mais de 100 alterações e opções que ficam bloqueadas durante pânico; conferir todas as páginas, resumo e confirmar separadamente. Alterar o arquivo, o estado de pânico e um ajuste entre revisão e confirmação; verificar recusa. Conferir expiração, nome diferente, rollback e autoload/recuperação.
 - Testar cores claras/escuras, relação de contraste exibida, atualização com tema e idioma; comparar leitura real de textos sem tratar o número como certificação.
 - Em ambiente autorizado, iniciar/cancelar repetidamente as opções de ocultação por nome durante a varredura; testar pânico, saída e streaming, verificando restauração e ausência de callbacks após cancelar. Anotar valores de tempo médio do motor visual com diferentes cargas, sem interpretá-los como uso de GPU ou FPS.
 
@@ -111,3 +111,18 @@ e compilação Luau não substituem este roteiro nem validam regras do servidor.
 - Confirmar que K/D e denúncias no ESP não fornecem dados inventados; testar estatísticas do perfil com e sem leaderstats.
 
 Nenhum teste acima foi executado no Roblox/Delta; rigs e acessórios personalizados podem exigir ajustes da caixa.
+
+## Remoção do bloqueio e prévia personalizada (a executar no Delta)
+
+- Sem pânico, ativar e desativar movimento, mira e outras ações implementadas;
+  testar atalhos e perfis. Conferir que não há aviso de bloqueio preventivo.
+  VIP, recursos pendentes e integrações de saque/recarga ainda têm limitações.
+- Ativar pânico com funções ligadas; confirmar interrupção e que só podem ser
+  reativadas após sair do pânico. Verificar respawn e saída.
+- Abrir ESP Jogador e NPCs: conferir boneco blocudo laranja, caixa e barra,
+  mudar cores, estilos e opções e comparar com personagens reais. Um perfil
+  antigo pode sobrescrever cores e opções padrão; testar um perfil novo.
+- Repetir com câmera inclinada, enquanto move personagem e câmera, em R6/R15
+  e rigs personalizados. Registrar vídeo e versão se persistirem tremores.
+
+Não houve execução Roblox/Delta nesta rodada.
