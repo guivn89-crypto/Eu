@@ -28,6 +28,14 @@ local function buildEspPanel(kind)
             lod = { on = true, near = 150 }, nearest = { on = false, color = Color3.fromRGB(255, 60, 60) },
             maxDist = 1000, textSize = 11, prevDist = 120, prevHp = (corpse or isProp) and 0 or 100,
         }
+        if kind == "Jogador" or kind == "NPCs" then
+            S.highlight.color, S.highlight.alpha, S.highlight.outline, S.highlight.outlineColor = Color3.fromRGB(40, 200, 170), 0.5, 2, nil
+            S.box.color, S.box.thick, S.box.style = Color3.fromRGB(80, 150, 255), 2, "Cantos"
+            S.name.color = Color3.fromRGB(255, 120, 150)
+            S.healthbar.auto, S.health.on = true, true
+        end
+        S.kdr = { on = false }; S.reports = { on = false }
+        S.arrows = { on = false, color = Color3.fromRGB(255, 90, 90), size = 18 }
         Library.ESP = Library.ESP or {}
         Library.ESP[kind] = S   -- o motor do ESP lê daqui
         local function new(class, props, parent)
@@ -70,6 +78,7 @@ local function buildEspPanel(kind)
 
         -- boneco em silhueta: blocos separados (cabeça, tronco, braços, pernas e
         -- pés), como um avatar blocudo. O "Corpo" usa a pose caída (deitado).
+        local originalPose = kind == "Jogador" or kind == "NPCs"
         local POSE = isProp and {
             w = 96, h = 76,
             parts = {
@@ -95,7 +104,10 @@ local function buildEspPanel(kind)
             skHead = { 0.09, 0.5 },
         } or {
             w = 96, h = 132,
-            parts = {
+            parts = originalPose and {
+                { 32, 5, 32, 30, 9 }, { 3, 36, 90, 46, 4 },
+                { 25, 84, 23, 46, 4 }, { 48, 84, 23, 46, 4 },
+            } or {
                 { 33, 2, 30, 26, 9 },                              -- cabeça
                 { 26, 32, 44, 42, 5 },                             -- tronco
                 { 12, 32, 12, 22, 4 }, { 12, 54, 12, 20, 4 }, { 12, 74, 12, 10, 3 },   -- braço esquerdo
@@ -112,6 +124,11 @@ local function buildEspPanel(kind)
         }
         local fg = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(CX, CY), Size = UDim2.fromOffset(POSE.w, POSE.h), BackgroundTransparency = 1 }, cv)
         local fgScale = new("UIScale", { Scale = 1 }, fg)
+        local hlFill
+        if originalPose then
+            hlFill = new("Frame", { Size = UDim2.fromScale(1, 1), BorderSizePixel = 0 }, fg)
+            new("UICorner", { CornerRadius = UDim.new(0, 2) }, hlFill)
+        end
         local parts = {}   -- { f = frame, st = stroke } (silhueta preenchida = chams)
         local function part(x, y, w, h, radius)
             local p = new("Frame", { Position = UDim2.fromOffset(x, y), Size = UDim2.fromOffset(w, h), BackgroundTransparency = 1, BorderSizePixel = 0 }, fg)
@@ -151,6 +168,7 @@ local function buildEspPanel(kind)
         local hpL = T(cv, { Size = UDim2.fromOffset(34, 12), Text = "100" })
         local distL = T(cv, { AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(90, 12), FontFace = Library.Fonts.Regular, TextXAlignment = Enum.TextXAlignment.Center })
         local tracer = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), BorderSizePixel = 0 }, cv)
+        local arrow = Library.MakeIcon(cv, "navigation-2", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(CVW - 20, 20), Visible = false })
         local farDot = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(CX, CY), Size = UDim2.fromOffset(6, 6), BorderSizePixel = 0 }, cv)
         new("UICorner", { CornerRadius = UDim.new(1, 0) }, farDot)
         local oorL = T(cv, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(CX, CY + 4), Size = UDim2.fromOffset(150, 16), Text = tr("Fora do alcance"), TextSize = 12, Visible = false })
@@ -158,7 +176,8 @@ local function buildEspPanel(kind)
 
         -- botões rápidos (espelham a lista da direita; quebram de linha sozinhos)
         local chipDefs = { { "highlight", "Destaque" }, { "box", "Caixa" }, { "name", "Nome" }, { "healthbar", "Barra de vida" }, { "health", "Vida" }, { "distance", "Distância" } }
-        table.insert(chipDefs, { "tracers", "Linhas até alvos" }); table.insert(chipDefs, { "skeleton", "Esqueleto" })
+        if kind == "Jogador" then table.insert(chipDefs, { "kdr", "K/D" }); table.insert(chipDefs, { "reports", "Denúncias" }) end
+        table.insert(chipDefs, { "tracers", "Linhas até alvos" }); table.insert(chipDefs, { "arrows", "Setas" }); table.insert(chipDefs, { "skeleton", "Esqueleto" })
         local chipFrame = new("Frame", { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 213), Size = UDim2.fromOffset(CVW, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, L)
         new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Wraps = true, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4) }, chipFrame)
         local chips, toggles = {}, {}
@@ -206,15 +225,20 @@ local function buildEspPanel(kind)
             shadow.Size = UDim2.fromOffset(bw * 1.45, math.max(12, 22 * sc)); at(shadow, CX, bottom + 3)
             -- chams: silhueta blocuda preenchida (laranja/vermelho) com contorno escuro fino
             local hl = S.highlight
+            local lineCol = hl.on and (nearColor or hl.color):Lerp(Color3.new(1, 1, 1), 0.4) or Library.Theme.Muted
+            if hlFill then
+                hlFill.Visible = hl.on; hlFill.BackgroundColor3 = nearColor or hl.color
+                hlFill.BackgroundTransparency = 1 - hl.alpha * (inRange and 1 or 0.35)
+            end
             for _, p in ipairs(parts) do
                 p.f.BackgroundColor3 = nearColor or hl.color
-                p.f.BackgroundTransparency = hl.on and (1 - hl.alpha * (inRange and 1 or 0.35)) or 1
-                p.st.Color = hl.outlineColor or Library.Theme.Muted
+                p.f.BackgroundTransparency = originalPose and 1 or (hl.on and (1 - hl.alpha * (inRange and 1 or 0.35)) or 1)
+                p.st.Color = originalPose and lineCol or (hl.outlineColor or Library.Theme.Muted)
                 p.st.Thickness = hl.on and math.max(hl.outline * 0.5, 0.5) or 1
-                p.st.Transparency = hl.on and hl.outline > 0 and 0 or 1
+                p.st.Transparency = originalPose and (inRange and 0.3 or 0.75) or (hl.on and hl.outline > 0 and 0 or 1)
             end
             if torsoText then
-                torsoText.TextColor3 = hl.on and Color3.new(1, 1, 1) or Library.Theme.Text
+                torsoText.TextColor3 = originalPose and lineCol or (hl.on and Color3.new(1, 1, 1) or Library.Theme.Text)
                 torsoText.TextTransparency = inRange and 0.1 or 0.7
             end
             -- esqueleto
@@ -267,6 +291,7 @@ local function buildEspPanel(kind)
             -- linha (tracer) do ponto de origem até a caixa
             tracer.Visible = S.tracers.on and details; tracer.BackgroundColor3 = S.tracers.color
             if S.tracers.origin == "Baixo" then line(tracer, CX, CVH, CX, bottom + 16, S.tracers.thick) else line(tracer, CX, 0, CX, top - 20, S.tracers.thick) end
+            arrow.Visible = S.arrows.on; arrow.ImageColor3 = S.arrows.color; arrow.Size = UDim2.fromOffset(S.arrows.size, S.arrows.size)
             oorL.Visible = not inRange
             for key, c in pairs(chips) do c.stroke.Color = S[key].on and Library.Theme.Accent or Library.Theme.Stroke end
         end
@@ -293,17 +318,17 @@ local function buildEspPanel(kind)
         end
         add("highlight", "Destaque", function(p)
             p:ColorPicker({ Name = "Cor do contorno", Default = S.highlight.outlineColor, Callback = function(c) S.highlight.outlineColor = c; refresh() end })
-            p:Slider({ Name = "Preenchimento", Min = 5, Max = 90, Default = 80, Suffix = "%", Callback = function(v) S.highlight.alpha = v / 100; refresh() end })
-            p:Toggle({ Name = "Contorno", Default = true, Callback = function(v) S.highlight.outline = v and 1.5 or 0; refresh() end })
+            p:Slider({ Name = "Preenchimento", Min = 5, Max = 90, Default = S.highlight.alpha * 100, Suffix = "%", Callback = function(v) S.highlight.alpha = v / 100; refresh() end })
+            p:Slider({ Name = "Contorno", Min = 0, Max = 4, Default = S.highlight.outline, Step = 0.5, Callback = function(v) S.highlight.outline = v; refresh() end })
         end)
         add("box", "Caixa", function(p)
-            p:Dropdown({ Name = "Estilo", Options = { "Cantos", "Completa" }, Default = "Completa", Callback = function(v) S.box.style = v; refresh() end })
-            p:Slider({ Name = "Espessura", Min = 1, Max = 5, Default = 1, Callback = function(v) S.box.thick = v; refresh() end })
+            p:Dropdown({ Name = "Estilo", Options = { "Cantos", "Completa" }, Default = S.box.style, Callback = function(v) S.box.style = v; refresh() end })
+            p:Slider({ Name = "Espessura", Min = 1, Max = 5, Default = S.box.thick, Callback = function(v) S.box.thick = v; refresh() end })
             p:Slider({ Name = "Tamanho do canto", Min = 6, Max = 30, Default = 14, Callback = function(v) S.box.corner = v; refresh() end })
         end)
         add("name", "Nome")
         add("healthbar", "Barra de vida", function(p)
-            p:Toggle({ Name = "Cor automática", Default = false, Callback = function(v) S.healthbar.auto = v; refresh() end })
+            p:Toggle({ Name = "Cor automática", Default = S.healthbar.auto, Callback = function(v) S.healthbar.auto = v; refresh() end })
             p:Dropdown({ Name = "Posição", Options = { "Esquerda", "Direita" }, Default = "Esquerda", Callback = function(v) S.healthbar.side = v; refresh() end })
             p:Slider({ Name = "Largura da barra", Min = 2, Max = 10, Default = 4, Callback = function(v) S.healthbar.width = v; refresh() end })
         end)
@@ -311,9 +336,16 @@ local function buildEspPanel(kind)
         add("distance", "Distância", function(p)
             p:Dropdown({ Name = "Unidade", Options = { "m", "studs" }, Default = "m", Callback = function(v) S.distance.unit = v; refresh() end })
         end)
+        if kind == "Jogador" then
+            toggles.kdr = R:Toggle({ Name = "K/D", Disabled = true, Tooltip = "Indisponível: não há fonte universal confiável para K/D de outros jogadores.", Settings = function(p) p:Label({ Text = "Indisponível neste jogo." }) end })
+            toggles.reports = R:Toggle({ Name = "Denúncias", Disabled = true, Tooltip = "Indisponível: denúncias não são públicas.", Settings = function(p) p:Label({ Text = "Indisponível: denúncias não são públicas." }) end })
+        end
         add("tracers", "Linhas até alvos", function(p)
             p:Dropdown({ Name = "Origem", Options = { "Baixo", "Cima" }, Default = "Baixo", Callback = function(v) S.tracers.origin = v; refresh() end })
             p:Slider({ Name = "Espessura", Min = 1, Max = 4, Default = 1, Callback = function(v) S.tracers.thick = v; refresh() end })
+        end)
+        add("arrows", "Setas", function(p)
+            p:Slider({ Name = "Tamanho", Min = 12, Max = 30, Default = 18, Callback = function(v) S.arrows.size = v; refresh() end })
         end)
         add("skeleton", "Esqueleto", function(p)
             p:Slider({ Name = "Espessura", Min = 1, Max = 4, Default = 1.5, Step = 0.5, Callback = function(v) S.skeleton.thick = v; refresh() end })
@@ -414,6 +446,13 @@ g = combate:Groupbox({ Name = "MIRA", Icon = "crosshair", Side = "Left", Checkbo
     end,
     Callback = function(v) Actions.COMBAT.on = v; Actions.applyAimState() end })
 Library.Safety:track("MIRA", g.Checkbox)
+g:Segmented({ Name = "Modo", Options = { "Silencioso", "Fixar", "Agressivo" }, Icons = { "crosshair", "lock", "flame" }, Default = "Fixar",
+    Tooltip = "Fixar usa a mira de câmera. Silencioso e Agressivo ainda não estão implementados.",
+    CanSelect = function(v, quiet)
+        if v == "Fixar" then return true end
+        if not quiet then notify(v .. ": modo indisponível; apenas Fixar está implementado.") end
+        return false
+    end })
 g:Dropdown({ Name = "Ativação", Options = { "Ao mirar", "Sempre" }, Default = "Ao mirar", Callback = function(v) Actions.COMBAT.activation = v end })
 T(g, "Alvo fixo"); T(g, "Previsão")
 S(g, "Suavização", 0, 300, 80, "ms", 1, function(v) Actions.COMBAT.smooth = v / 300; Actions.clampCfg() end)
@@ -426,7 +465,8 @@ g:Dropdown({ Name = "Partes do corpo", Options = { "Cabeça", "Corpo", "Braços"
     Actions.COMBAT.parts = {}
     for _, part in ipairs(type(v) == "table" and v or { v }) do Actions.COMBAT.parts[part] = true end
 end })
-T(g, "Alternativa visível", true); T(g, "Mirar em NPCs", true); T(g, "Ignorar obstáculos na mira", true)
+T(g, "Alternativa visível", true); T(g, "Mirar em NPCs", true); T(g, "Tiro por paredes", true)
+T(g, "Ignorar obstáculos na mira", true)
 g:Keybind({ Name = "Adicionar amigo", Default = "MB3", Callback = function()
     local t = Actions.AIM.target and Actions.AIM.target.t
     if t and t.plr then Actions.COMBAT.friends[t.plr] = true; Actions.say("Amigo: " .. t.plr.Name) else Actions.say("Sem alvo no momento.") end
@@ -493,7 +533,7 @@ end
 local extras = Window:Tab({ Name = "EXTRAS", Icon = "layout-grid" })
 g = extras:Groupbox({ Name = "EXTRAS", Icon = "layout-grid", Side = "Left" })
 T(g, "Troca rápida"); T(g, "Modo pânico"); g:Button({ Name = "Atravessar porta", Callback = function() if Library.Safety:allow("Atravessar porta", true) then Actions.noclipPulse() else notify("Bloqueado pelo modo preventivo.") end end })
-T(g, "Remover efeitos"); T(g, "Avisos de entrada")
+T(g, "Remover efeitos"); T(g, "Avisos de denúncias", true); T(g, "Avisos de entrada")
 g = extras:Groupbox({ Name = "SONS", Icon = "volume-2", Side = "Left" })
 g:Input({ Name = "Adicionar ID de som", Placeholder = "ID", Callback = function(v) Actions.setSoundId(v) end })
 for _, n in ipairs({ "Jump", "Pegadas", "Pouso", "Capacete", "Tiro na cabeça", "Tiro no corpo", "Abate", "Disparo", "Acerto com sangue" }) do
@@ -784,6 +824,11 @@ do
     local name = box:Input({ Name = "Nome da configuração", Default = "default", NoPersist = true,
         Tooltip = function() return tr("Escolha um nome para salvar ou carregar os ajustes do menu.") end, Callback = function() end })
     Window._cfgBox = name.Box
+    if Window._headerCfgBox then
+        local headerBox = Window._headerCfgBox
+        Actions.connect(headerBox:GetPropertyChangedSignal("Text"), function() if name.Box.Text ~= headerBox.Text then name.Box.Text = headerBox.Text end end)
+        Actions.connect(name.Box:GetPropertyChangedSignal("Text"), function() if headerBox.Text ~= name.Box.Text then headerBox.Text = name.Box.Text end end)
+    end
     local active = box:Label({ Text = "Ativa: —" })
     local choices = box:Dropdown({ Name = "Configurações disponíveis", Options = {}, NoPersist = true,
         Tooltip = function() return tr("Seleciona um arquivo existente sem carregá-lo.") end,
@@ -919,7 +964,7 @@ g:Slider({ Name = "Escala do menu", Min = 70, Max = 130, Default = 100, Step = 5
     Tooltip = function() return tr("Ajusta o tamanho do menu, limitado ao espaço disponível na tela.") end,
     Callback = function(v) Window:SetScaleFactor(v / 100) end })
 g:Slider({ Name = "Atualizações do ESP", Min = 10, Max = 60, Default = 30, Step = 5, Suffix = " fps",
-    Tooltip = function() return tr("Limita a frequência de atualização visual do ESP, radar e busca de saque.") end,
+    Tooltip = function() return tr("Controla a frequência da busca de alvos, radar e saque; a projeção do ESP acompanha cada quadro.") end,
     Callback = function(v) Library.RenderRate = math.clamp(v, 10, 60) end })
 g:Keybind({ Name = "Tecla do menu", Default = "RightShift", OnChanged = function(k) Window:SetKeybind(k); keys.menu = k.Name; refreshPanels() end, Callback = function() end })
 g:Keybind({ Name = "Tecla do cursor", Default = "LeftAlt", OnChanged = function(k) cursorKey = k; keys.cursor = k.Name; refreshPanels() end, Callback = function() end })

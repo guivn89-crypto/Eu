@@ -131,7 +131,7 @@ do
         { "UpperTorso", "RightUpperArm" }, { "RightUpperArm", "RightLowerArm" }, { "RightLowerArm", "RightHand" }, { "LowerTorso", "LeftUpperLeg" }, { "LeftUpperLeg", "LeftLowerLeg" },
         { "LeftLowerLeg", "LeftFoot" }, { "LowerTorso", "RightUpperLeg" }, { "RightUpperLeg", "RightLowerLeg" }, { "RightLowerLeg", "RightFoot" } }
     local R6 = { { "Head", "Torso" }, { "Torso", "Left Arm" }, { "Torso", "Right Arm" }, { "Torso", "Left Leg" }, { "Torso", "Right Leg" } }
-    local KEYS = { "highlight", "box", "name", "healthbar", "health", "distance", "tracers", "skeleton" }
+    local KEYS = { "highlight", "box", "name", "healthbar", "health", "distance", "tracers", "arrows", "skeleton" }
     local function anyOn(S)
         if not S then return false end
         for _, k in ipairs(KEYS) do if S[k] and S[k].on then return true end end
@@ -167,6 +167,7 @@ do
         d.hbFill = mk("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.fromScale(1, 1), BorderSizePixel = 0 }, d.hbBg)
         d.name = txt(r, Vector2.new(0.5, 1)); d.hp = txt(r, Vector2.new(1, 0)); d.dist = txt(r, Vector2.new(0.5, 0))
         d.tracer = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), BorderSizePixel = 0, Visible = false }, r)
+        d.arrow = Library.MakeIcon(r, "navigation-2", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Visible = false })
         d.dot = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(8, 8), BorderSizePixel = 0, Visible = false }, r)
         mk("UICorner", { CornerRadius = UDim.new(1, 0) }, d.dot)
         d.hl = mk("Highlight", { DepthMode = Enum.HighlightDepthMode.AlwaysOnTop, Enabled = false }, holder)
@@ -176,23 +177,64 @@ do
         d.root.Visible = false
         d.hl.Enabled = false
     end
+    -- Alturas estáveis em relação à raiz, sem depender de poses/acessórios.
+    local function characterOffsets(t)
+        local function partHeight(name)
+            local part = t.model:FindFirstChild(name)
+            return part and part:IsA("BasePart") and part.Size.Y or nil
+        end
+        local rootHalf = t.hrp.Size.Y / 2
+        local above, below
+        local torso = partHeight("Torso")
+        if torso then
+            above = torso / 2 + (partHeight("Head") or 1)
+            below = rootHalf + (partHeight("Left Leg") or partHeight("Right Leg") or 2)
+        else
+            local upper, lower = partHeight("UpperTorso"), partHeight("LowerTorso")
+            above = (lower or t.hrp.Size.Y) / 2 + (upper or 1) + (partHeight("Head") or 1)
+            below = rootHalf + math.max(0, t.hum.HipHeight)
+        end
+        return math.max(above, 1.5), math.max(below, 1.5)
+    end
     local function drawTarget(d, t, S, c, vp, isNearest)
         local near = isNearest and S.nearest.on
         local ncol = S.nearest.color
-        local sz = t.model:IsA("Model") and t.model:GetExtentsSize() or t.model.Size
-        local center = t.model:GetPivot().Position
-        local topV = c:WorldToViewportPoint(center + Vector3.new(0, sz.Y / 2, 0))
-        local botV = c:WorldToViewportPoint(center - Vector3.new(0, sz.Y / 2, 0))
+        local center, above, below
+        if t.hum and t.hum.Health > 0 then
+            center = t.hrp.Position
+            above, below = characterOffsets(t)
+        else
+            local sz = t.model:IsA("Model") and t.model:GetExtentsSize() or t.model.Size
+            center, above, below = t.model:GetPivot().Position, sz.Y / 2, sz.Y / 2
+        end
+        local topV = c:WorldToViewportPoint(center + Vector3.new(0, above, 0))
+        local botV = c:WorldToViewportPoint(center - Vector3.new(0, below, 0))
         d.root.Visible = true
         -- esconde tudo; só reaparece o que estiver ligado
         d.boxFull.Visible = false
         for i = 1, 8 do d.corners[i].Visible = false end
         d.hbBg.Visible = false; d.name.Visible = false; d.hp.Visible = false; d.dist.Visible = false
-        d.tracer.Visible = false; d.dot.Visible = false
+        d.tracer.Visible = false; d.dot.Visible = false; d.arrow.Visible = false
         if d.skelOn then for _, f in ipairs(d.skel) do f.Visible = false end; d.skelOn = false end
         local onScreen = topV.Z > 0 and botV.Z > 0 and topV.X > -60 and topV.X < vp.X + 60 and topV.Y > -120 and botV.Y < vp.Y + 120
         if not onScreen then
             d.hl.Enabled = false
+            if S.arrows and S.arrows.on then
+                local projected = c:WorldToViewportPoint(center)
+                local x, y = projected.X - vp.X / 2, projected.Y - vp.Y / 2
+                if projected.Z < 0 then x, y = -x, -y end
+                local length = math.sqrt(x * x + y * y)
+                if length < 0.001 then x, y, length = 0, -1, 1 end
+                x, y = x / length, y / length
+                local margin = S.arrows.size + 8
+                local rx, ry = math.max(1, vp.X / 2 - margin), math.max(1, vp.Y / 2 - margin)
+                local scale = math.min(rx / math.max(math.abs(x), 0.0001), ry / math.max(math.abs(y), 0.0001))
+                d.arrow.Position = UDim2.fromOffset(vp.X / 2 + x * scale, vp.Y / 2 + y * scale)
+                d.arrow.Rotation = math.deg(math.atan2(y, x)) + 90
+                d.arrow.Size = UDim2.fromOffset(S.arrows.size, S.arrows.size)
+                d.arrow.ImageColor3 = near and ncol or S.arrows.color
+                d.arrow.Visible = true
+            end
             return
         end
         local top, bottom = topV.Y, botV.Y
@@ -330,27 +372,43 @@ do
             end
         end
     end
-    local list, vis = {}, {}
-    local function processKind(kind, S, c, vp)
+    local selectedTargets, vis = {}, {}
+    local function processKind(kind, S, c, vp, slowTick)
         local P = pool[kind]
-        table.clear(list)
-        if S and not Library.Panic and Library.ESPMaster[kind] ~= false and anyOn(S) then gather(kind, list) end
+        local active = S and not Library.Panic and Library.ESPMaster[kind] ~= false and anyOn(S)
+        local selected = selectedTargets[kind]
         local camPos = c.CFrame.Position
-        local maxM = S and S.maxDist or 1000
-        table.clear(vis)
-        for _, t in ipairs(list) do
-            t.studs = (t.hrp.Position - camPos).Magnitude
-            t.m = t.studs * 0.28
-            if t.m <= maxM then vis[#vis + 1] = t end
+        if not active then
+            selectedTargets[kind] = nil
+            selected = {}
+        elseif slowTick or not selected then
+            local candidates = {}
+            gather(kind, candidates)
+            table.clear(vis)
+            for _, t in ipairs(candidates) do
+                if t.model.Parent and t.hrp.Parent and (not t.hum or t.hum.Parent) then
+                    t.studs = (t.hrp.Position - camPos).Magnitude
+                    t.m = t.studs * 0.28
+                    if t.m <= S.maxDist then vis[#vis + 1] = t end
+                end
+            end
+            table.sort(vis, function(a, b) return a.studs < b.studs end)
+            selected = {}
+            for i = 1, math.min(#vis, 24) do selected[i] = vis[i] end
+            selectedTargets[kind] = selected
         end
-        table.sort(vis, function(a, b) return a.studs < b.studs end)
         local seen = {}
-        for i = 1, math.min(#vis, 24) do
-            local t = vis[i]
-            seen[t.model] = true
-            local d = P[t.model]
-            if not d then d = newDraw(); P[t.model] = d end
-            drawTarget(d, t, S, c, vp, i == 1)
+        for i, t in ipairs(selected) do
+            if t.model.Parent and t.hrp.Parent and (not t.hum or t.hum.Parent) then
+                t.studs = (t.hrp.Position - camPos).Magnitude
+                t.m = t.studs * 0.28
+                if t.m <= S.maxDist then
+                    seen[t.model] = true
+                    local d = P[t.model]
+                    if not d then d = newDraw(); P[t.model] = d end
+                    drawTarget(d, t, S, c, vp, i == 1)
+                end
+            end
         end
         for model, d in pairs(P) do
             if not seen[model] then
@@ -598,19 +656,22 @@ do
     -- ---------- laço principal ----------
     local errCount, stopped, elapsed = 0, false, 0
     Library.RenderRate = Library.RenderRate or 30
-    conn(RunService.RenderStepped, function(dt)
-        if stopped then return end
+    local function renderEngine(dt)
+        if stopped or engineClosed then return end
         elapsed += dt
-        if elapsed < 1 / math.clamp(Library.RenderRate or 30, 10, 60) then return end
-        dt, elapsed = elapsed, 0
+        local slowTick = elapsed >= 1 / math.clamp(Library.RenderRate or 30, 10, 60)
+        local slowDt = elapsed
+        if slowTick then elapsed = 0 end
         local started = os.clock()
         local ok, err = pcall(function()
             local c = Workspace.CurrentCamera
             if not c then return end
             local vp = c.ViewportSize
-            for kind in pairs(pool) do processKind(kind, Library.ESP and Library.ESP[kind], c, vp) end
-            updateRadar(c)
-            updateLoot(dt, c)
+            for kind in pairs(pool) do processKind(kind, Library.ESP and Library.ESP[kind], c, vp, slowTick) end
+            if slowTick then
+                updateRadar(c)
+                updateLoot(slowDt, c)
+            end
         end)
         if Library.Diagnostics then Library.Diagnostics:sampleEngine(os.clock() - started) end
         if not ok then
@@ -625,7 +686,10 @@ do
         else
             errCount = 0
         end
-    end)
+    end
+    local renderName = "BBC_ESP_" .. tostring({})
+    local bound = pcall(function() RunService:BindToRenderStep(renderName, Enum.RenderPriority.Camera.Value + 1, renderEngine) end)
+    if not bound then conn(RunService.RenderStepped, renderEngine) end
 
     -- desliga o motor de vez: laço, conexões, GUIs do ESP/radar e registros do radar
     local function stopEngine()
@@ -633,6 +697,7 @@ do
         engineClosed = true
         Actions.alive = false
         stopped = true
+        if bound then pcall(function() RunService:UnbindFromRenderStep(renderName) end) end
         for _, c in ipairs(engineConns) do pcall(function() c:Disconnect() end) end
         for _, g in ipairs(engineGuis) do pcall(function() g:Destroy() end) end
         for _, P in pairs(pool) do for _, d in pairs(P) do pcall(hideDraw, d) end end

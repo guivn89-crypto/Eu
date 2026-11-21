@@ -594,6 +594,13 @@
     "ZIndexBehavior": [
       "Global",
       "Sibling"
+    ],
+    "RenderPriority": [
+      "First",
+      "Input",
+      "Camera",
+      "Character",
+      "Last"
     ]
   },
   "constructible_classes": [

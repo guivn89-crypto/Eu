@@ -48,7 +48,7 @@ for _, name in ipairs({
     "Mira falsa", "Retícula", "Círculo da mira", "Rastro personalizado", "Marca de acerto", "Números de dano", "Efeitos de acerto",
     "Efeitos de eliminação", "Dados do alvo", "Luz", "Hora e sol", "Sombras", "Renderização", "Neblina", "Atmosfera", "Céu", "Nuvens",
     "Florescer", "Desfoque", "Ajuste de cor", "Profundidade", "Raios de sol", "Tonalidade", "Buscar chefes", "Pontos de saída",
-    "Modo pânico", "Avisos de entrada", "Notificar", "Criador", "Testador", "Moderador", "Trapaceiro", "Jump", "Pegadas", "Pouso",
+    "Modo pânico", "Avisos de entrada", "Avisos de denúncias", "Tiro por paredes", "Notificar", "Criador", "Testador", "Moderador", "Trapaceiro", "Jump", "Pegadas", "Pouso",
     "Capacete", "Tiro na cabeça", "Tiro no corpo", "Abate", "Disparo", "Acerto com sangue",
 }) do GEARS[name] = true end
 
@@ -420,7 +420,7 @@ end
 local MODALS = {}
 local ESP_KINDS = { Jogador = true, NPCs = true, Corpo = true, Recipiente = true, ["Item no chão"] = true, ["Itens de missão"] = true }
 local function T(tab, name, default, tip)
-    local unavailable = { ["Mira falsa"] = true, ["Alternativa visível"] = true,
+    local unavailable = { ["Tiro por paredes"] = true, ["Avisos de denúncias"] = true, ["Mira falsa"] = true, ["Alternativa visível"] = true,
         ["Trocar personagem"] = true }
     local o = { Name = name, Default = default or false, Tooltip = tip or function() return Library.Internal.tipFor(name) end }
     if ESP_KINDS[name] then
@@ -440,6 +440,7 @@ local function T(tab, name, default, tip)
         end
     end
     if GEARS[name] then
+        if name == "Avisos de denúncias" or name == "Notificar" then o.SettingsIcon = "message-circle" end
         o.Settings = buildSettings(name)
         if name ~= "Aura" and name ~= "Auréola" and name ~= "Círculo de salto" and name ~= "Rastro estelar" then
             o.SettingsPath = name

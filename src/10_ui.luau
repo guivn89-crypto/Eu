@@ -1597,6 +1597,32 @@ function Library:Window(opts)
         if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = false end
     end)
 
+    -- Barra original de perfil, preservando confirmação para sobrescrita e carga.
+    local cfgBar = create("Frame", { Position = UDim2.fromOffset(130, 11), Size = UDim2.new(1, -330, 0, 30), BorderSizePixel = 0 }, header)
+    bind(cfgBar, "BackgroundColor3", "Surface2"); corner(cfgBar, 3); stroke(cfgBar, "Stroke", 0.1)
+    local saveBtn = create("TextButton", { Size = UDim2.fromOffset(30, 30), BackgroundTransparency = 1, Text = "", AutoButtonColor = false }, cfgBar)
+    icon(saveBtn, "save", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
+    local cfgBox = create("TextBox", { Position = UDim2.fromOffset(34, 0), Size = UDim2.new(1, -38, 1, 0), BackgroundTransparency = 1, Text = "default", TextSize = 14,
+        FontFace = Library.Fonts.Regular, ClearTextOnFocus = false, PlaceholderText = "default" }, cfgBar)
+    bind(cfgBox, "TextColor3", "Text"); bind(cfgBox, "PlaceholderColor3", "Muted")
+    self._headerCfgBox = cfgBox
+    safeConnect(saveBtn.MouseButton1Click, function()
+        local ok, reason = self:RequestSaveConfig(cfgBox.Text)
+        if ok then self:SetAutoload(self._cfgName or "default") end
+        Library:Notify({ Title = "BBC HUB", Content = ok and "Configuração salva." or ("Salvar: " .. tostring(reason) .. ". Confirme novamente se solicitado."), Duration = 4 })
+    end)
+    safeConnect(cfgBox.FocusLost, function(enter)
+        if not enter then return end
+        local name = cleanName(cfgBox.Text); if name == "" then name = "default" end
+        if self._configPreview and self._configPreview.name == name then
+            local ok, err = self:ConfirmConfigPreview(name)
+            if ok then self:SetAutoload(name) end
+            Library:Notify({ Title = "BBC HUB", Content = ok and "Configuração carregada." or ("Carregamento: " .. tostring(err)), Duration = 4 })
+        else
+            local report, err = self:StageConfigPreview(name)
+            Library:Notify({ Title = "BBC HUB", Content = report and ("Prévia: " .. #report.changes .. " alterações. Veja Configurações ou pressione Enter novamente para confirmar.") or ("Prévia: " .. tostring(err)), Duration = 5 })
+        end
+    end)
     -- busca
     local searchBox = create("TextBox", { Position = UDim2.fromOffset(130, 11), Size = UDim2.new(1, -330, 0, 30), Text = "", PlaceholderText = Library.Tr("Buscar por nome"), TextSize = 14,
         FontFace = Library.Fonts.Regular, ClearTextOnFocus = false, Visible = false, BorderSizePixel = 0, TextXAlignment = Enum.TextXAlignment.Left }, header)
@@ -1620,7 +1646,7 @@ function Library:Window(opts)
     self._gearBtn, self._gearIcon, self._gearStroke = gearBtn, gearIcon, gearStroke
     safeConnect(searchBtn.MouseButton1Click, function()
         local on = not searchBox.Visible
-        searchBox.Visible = on
+        searchBox.Visible = on; cfgBar.Visible = not on
         if on then searchBox:CaptureFocus() else searchBox.Text = ""; if self._searchPopup then self._searchPopup.Visible = false end end
     end)
     -- Atalho convencional, apenas com menu visível e sem outro campo em foco.
