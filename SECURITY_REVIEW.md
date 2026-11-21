@@ -32,7 +32,7 @@ Não há garantia de segurança, de ausência de detecção ou de punição.
 | Remotes e prompts | Limites locais; recarga exige caminho explícito e saque exige PlaceId e caminhos exatos de prompts, recusando ambiguidades. | Isso não comprova autorização nem sucesso no servidor; ambos permanecem bloqueados por padrão. |
 | Interface | Tenta API opcional de proteção e parent com fallback; limita notificações. | O executor pode não oferecer a API ou sua implementação pode falhar. Sucesso da chamada não prova ocultação. |
 | Configurações | Validação, tentativa de rollback, backup anterior válido e bloqueio do autosave após falha inicial. Arquivos antigos são preservados. | Escrita/backup não são atômicos, não há recuperação automática e callbacks podem ter efeitos externos. |
-| Dependências | Ícones com símbolos locais ou IDs de asset; não executa código remoto/cacheado para ícones. | Outros assets, fontes e o executor ainda têm riscos. |
+| Dependências | Ícones Lucide com IDs de asset incluídos localmente (MIT); não executa código remoto/cacheado para ícones. | Outros assets, fontes e o executor ainda têm riscos. |
 | Streaming e desempenho | Varredura incremental no motor, na mira e nas marcações de chefes/saídas, caches limitados, remoção em streaming, deduplicação e frequência visual ajustável. | Outras funções ainda usam `GetDescendants`; caches limitados podem omitir objetos. Nem todos os ciclos foram auditados em Roblox. |
 | Diagnóstico | Histórico local limitado e painel de capacidades/caminhos declarados. | Não testa funcionamento real das APIs, não captura todos os erros e não detecta anticheat. |
 

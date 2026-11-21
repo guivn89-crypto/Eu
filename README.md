@@ -78,6 +78,19 @@ nem execute arquivos de origem desconhecida.
   levar a restrições na conta; consulte [Anti-cheat Messages](https://en.help.roblox.com/hc/en-us/articles/24275616578708-Anti-cheat-Messages).
   Não há garantia de segurança ou compatibilidade em executores de terceiros.
 
+## Restauração do menu e limites
+
+O seletor original de mira foi restaurado: **Fixar** usa a mira local de câmera;
+**Silencioso** e **Agressivo** estão visíveis, mas indisponíveis porque não há
+implementação para eles. O controle original **Tiro por paredes** não altera os
+projéteis e também está indisponível. A opção separada **Ignorar obstáculos na
+mira** só altera a seleção de alvos. **Avisos de denúncias** e os indicadores
+ESP de K/D e denúncias permanecem indisponíveis sem fontes confiáveis; o campo
+de denúncias no perfil mostra “—”. O K/D do perfil é calculado a partir dos
+abates e mortes locais ou fornecidos pelo jogo, não uma estatística verificada.
+O bloqueio preventivo ainda pode manter desligados padrões que no menu original
+eram apenas visuais. Algumas opções e ferramentas adicionais permanecem no menu.
+
 ## Abas
 
 | Aba | Conteúdo |
@@ -239,14 +252,18 @@ A revisão das proteções e das limitações conhecidas está em [SECURITY_REVI
   posterior do jogo não é sobrescrita ao restaurar. Essas medidas são parciais:
   nem todas as tarefas ou dependências externas são verificadas, e efeitos já
   processados pelo servidor não podem ser desfeitos pelo cliente.
-- Ícones usam símbolos locais ou IDs de asset fornecidos, sem baixar ou executar
-  código Lua de terceiros. Fontes personalizadas ainda podem usar rede e assets.
+- Os ícones Lucide do menu usam uma tabela estática de IDs Roblox de
+  `Footagesus/Icons` (MIT; licença em `THIRD_PARTY_LICENSES/`). Não se baixa nem
+  executa Lua para os ícones; sua exibição depende da disponibilidade dos assets
+  no Roblox. Fontes personalizadas ainda podem usar rede e assets.
 - Caches de itens e saque descartam entradas que saem do Workspace e limitam
   candidatos a 2.048 por categoria; objetos excedentes podem não aparecer até
   uma nova sessão/entrada em streaming. As varreduras iniciais do motor e de
   NPCs da mira percorrem os filhos incrementalmente, mas outras opções ainda
-  usam `GetDescendants`. **Atualizações do ESP** limita ESP/radar/busca a 10–60
-  atualizações por segundo (padrão 30); pode reduzir fluidez. A troca de
+  usam `GetDescendants`. **Atualizações do ESP** controla a frequência de seleção
+  de alvos, radar e saque (10–60 Hz, padrão 30); a projeção das marcações é
+  atualizada a cada quadro após a câmera quando disponível. Isso pode consumir
+  mais recursos, principalmente em celulares. A troca de
   personagem interrompe opções de risco; limpeza/restauração são parciais.
   Marcações de chefes e saídas usam varredura incremental, cancelam ao desligar,
   respeitam o pânico e têm limite de 100 por categoria. Elas não acompanham
@@ -305,6 +322,11 @@ versões antigas: se estiverem cheios ou houver falha, avisa e segue com o backu
 normal `.bak`. Também é possível criar uma versão manualmente e restaurá-la em
 um novo perfil `-histN`, sem carregá-lo automaticamente. A cópia exige APIs de
 arquivo e a escrita não é atômica.
+
+O campo original no cabeçalho também salva (sobrescritas exigem dois toques) e
+carrega pelo nome: Enter prepara uma prévia, outro Enter confirma; a aba de
+configurações mostra os detalhes antes de confirmar. Ambos usam as mesmas regras
+de proteção e dependem das APIs de arquivos do executor.
 
 O painel mostra a configuração ativa e lista até 100 arquivos quando `listfiles`
 está disponível; arquivos além desse limite ainda podem ser carregados pelo nome.

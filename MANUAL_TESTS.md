@@ -101,3 +101,13 @@ e compilação Luau não substituem este roteiro nem validam regras do servidor.
   que os valores são restaurados quando não foram alterados pelo próprio jogo.
   Testar também mapas com várias nuvens e mudanças durante o uso; avisos já
   existentes no mapa não são necessariamente causados pelo hub.
+
+## Restauração do menu e movimento do ESP (a executar no Delta)
+
+- Comparar todas as abas, cabeçalho, ícones, opções e engrenagens com o original; verificar assets Lucide em diferentes redes. Testar rotação e telas pequenas.
+- Em COMBATE, confirmar Fixar como padrão; selecionar Silencioso/Agressivo e verificar aviso sem ativação falsa. Tiro por paredes e Avisos de denúncias devem estar indisponíveis.
+- No campo do cabeçalho, salvar um perfil novo e confirmar sobrescrita em dois toques; carregar em duas etapas e verificar o resumo na aba de configurações. Repetir sem APIs de arquivos.
+- Em um ambiente autorizado com personagens R6 e R15, movimentar jogador e câmera, aproximar/afastar e mudar FOV: conferir caixa, texto, linhas, esqueleto e setas, inclusive alvo atrás da câmera, respawn e pânico. Comparar diversos valores de Atualizações do ESP e observar FPS/consumo em celular com muitos alvos e itens. Testar saída e nova execução.
+- Confirmar que K/D e denúncias no ESP não fornecem dados inventados; testar estatísticas do perfil com e sem leaderstats.
+
+Nenhum teste acima foi executado no Roblox/Delta; rigs e acessórios personalizados podem exigir ajustes da caixa.

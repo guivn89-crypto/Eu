@@ -152,10 +152,13 @@ class BuildTests(unittest.TestCase):
         self.assertIn('itemCounts[kind] < 2048', engine)
         self.assertIn('candCount < 2048', engine)
 
-    def test_menu_configuration_replaces_header_management(self):
+    def test_header_configuration_preserves_safe_management(self):
         ui = (ROOT / 'src' / '10_ui.luau').read_text(encoding='utf-8')
         tabs = (ROOT / 'src' / '50_tabs.luau').read_text(encoding='utf-8')
-        self.assertNotIn('local cfgBar =', ui)
+        self.assertIn('local cfgBar =', ui)
+        self.assertIn('self:RequestSaveConfig(cfgBox.Text)', ui)
+        self.assertIn('self:StageConfigPreview(name)', ui)
+        self.assertIn('self:ConfirmConfigPreview(name)', ui)
         self.assertIn('Salvar configuração', tabs)
         self.assertIn('Revisar configuração', tabs)
         self.assertIn('Confirmar carregamento', tabs)
@@ -363,18 +366,52 @@ function LP:FindFirstChildOfClass(n) return backpack end
             path.write_text(setup + helper + spec, encoding='utf-8')
             subprocess.run([runner, str(path)], check=True, capture_output=True, text=True)
 
-    def test_no_fake_menus_or_removed_statistics(self):
+    def test_original_controls_return_without_faking_statistics(self):
         menu = (ROOT / 'src' / '40_menu.luau').read_text(encoding='utf-8')
         actions = (ROOT / 'src' / '30_actions.luau').read_text(encoding='utf-8')
         tabs = (ROOT / 'src' / '50_tabs.luau').read_text(encoding='utf-8')
         engine = (ROOT / 'src' / '60_engine.luau').read_text(encoding='utf-8')
         self.assertNotIn('Callback = function(v) end', menu)
-        for name in ('Denúncias', 'Proporção K/D', 'Avisos de denúncias'):
-            self.assertNotIn(name, actions + menu + tabs)
+        self.assertIn('vRep.Text = "—"', actions)
+        self.assertIn('vKD.Text = string.format', actions)
+        self.assertIn('["Avisos de denúncias"] = true', menu)
+        self.assertIn('["Tiro por paredes"] = true', menu)
+        self.assertIn('Options = { "Silencioso", "Fixar", "Agressivo" }', tabs)
+        self.assertIn('if v == "Fixar" then return true end', tabs)
+        self.assertIn('Name = "K/D", Disabled = true', tabs)
+        self.assertIn('Name = "Denúncias", Disabled = true', tabs)
         self.assertNotRegex(engine, r'\bd\.near\b')
         self.assertIn('["Barra rápida"] = function(v) applyHotbar(v) end', actions)
         self.assertNotIn('Actions.WEAPON.spread', tabs)
         self.assertNotIn('Actions.WEAPON.gap', tabs)
+
+    def test_esp_rig_offsets_and_render_caching_with_luau(self):
+        runner = os.environ.get('LUAU_BIN')
+        if not runner:
+            self.skipTest('Defina LUAU_BIN para executar os testes de Luau.')
+        engine = (ROOT / 'src' / '60_engine.luau').read_text(encoding='utf-8')
+        offsets = engine[engine.index('    local function characterOffsets'):engine.index('    local function drawTarget')]
+        process = engine[engine.index('    local selectedTargets, vis'):engine.index('    -- ---------- radar')]
+        spec = (ROOT / 'tests' / 'esp_stability_spec.luau').read_text(encoding='utf-8')
+        parts = spec.split('-- INSERT IMPLEMENTATION HERE')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'esp_stability.luau'
+            path.write_text(parts[0] + offsets + process + parts[1], encoding='utf-8')
+            subprocess.run([runner, str(path)], check=True, capture_output=True, text=True)
+        self.assertIn('Enum.RenderPriority.Camera.Value + 1', engine)
+        self.assertIn('RunService:UnbindFromRenderStep(renderName)', engine)
+        render = engine[engine.index('    local function renderEngine'):engine.index('    local renderName')]
+        self.assertIn('processKind(kind, Library.ESP and Library.ESP[kind], c, vp, slowTick)', render)
+        self.assertIn('if slowTick then', render)
+        self.assertNotIn('if elapsed <', render)
+
+    def test_lucide_icons_are_static_and_licensed(self):
+        head = (ROOT / 'src' / '00_head.luau').read_text(encoding='utf-8')
+        for name in ('crosshair', 'lock', 'flame', 'save', 'settings', 'navigation-2'):
+            self.assertRegex(head, r'\["' + name + r'"\] = "rbxassetid://\d+"')
+        self.assertIn('Copyright (c) 2025 Footages', head)
+        self.assertIn('Permission is hereby granted', head)
+        self.assertTrue((ROOT / 'THIRD_PARTY_LICENSES' / 'Footagesus-Icons-MIT.txt').exists())
 
     def test_animation_selection_with_luau_if_available(self):
         runner = os.environ.get('LUAU_BIN')
@@ -705,7 +742,7 @@ print('loot marker instance references OK')
         settings = menu[menu.index('local SETTINGS = {'):menu.index('GEARS["Troca rápida"]')]
         implemented = set(re.findall(r'\["([^"\n]+)"\]\s*=', settings))
         implemented.update(('Aura', 'Auréola', 'Círculo de salto', 'Rastro estelar', 'Jump', 'Pegadas', 'Pouso', 'Capacete', 'Tiro na cabeça', 'Tiro no corpo', 'Abate', 'Disparo', 'Acerto com sangue'))
-        self.assertEqual(gears - implemented, {'Mira falsa', 'Mochila', 'Mochila personalizada', 'Trocar personagem'})
+        self.assertEqual(gears - implemented, {'Mira falsa', 'Mochila', 'Mochila personalizada', 'Trocar personagem', 'Tiro por paredes', 'Avisos de denúncias'})
 
     def test_hit_marker_timer_with_luau_if_available(self):
         runner = os.environ.get('LUAU_BIN')

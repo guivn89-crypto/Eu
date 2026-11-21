@@ -2465,11 +2465,14 @@ local function initializeActions()
 
             -- Estatísticas
             local st = box(root, "Estatísticas", 2)
-            local sg = grid(st, 4, 1)
+            local sg = grid(st, 6, 1)
             local vKills = cell(sg, "Abates", 1, 15)
             local vDeaths = cell(sg, "Mortes", 2, 15)
-            local vPlayed = cell(sg, "Tempo jogado", 3, 15)
-            local vDmg = cell(sg, "Dano recebido", 4, 15)
+            local vKD = cell(sg, "Proporção K/D", 3, 15)
+            local vRep = cell(sg, "Denúncias", 4, 15)
+            local vPlayed = cell(sg, "Tempo jogado", 5, 15)
+            local vDmg = cell(sg, "Dano recebido", 6, 15)
+            th(vKD, "TextColor3", "Accent"); vRep.Text = "—"
 
             -- Sessão e Conta lado a lado
             local row = mk("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 3 }, root)
@@ -2609,6 +2612,7 @@ local function initializeActions()
                 local deaths = leaderStat({ "death", "morte", "died" }) or data.deaths
                 vKills.Text = tostring(kills)
                 vDeaths.Text = tostring(deaths)
+                vKD.Text = string.format("%.2f", kills / math.max(deaths, 1))
                 vPlayed.Text = fmtDuration(data.played)
                 vDmg.Text = fmtBig(data.damage)
                 local expiry = Config.Expiry
