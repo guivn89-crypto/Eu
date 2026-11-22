@@ -696,6 +696,7 @@ function Protection.Obfuscation.flattenControlFlow(fn)
 end
 
 function Protection.Obfuscation.wrapWithChecks(fn, checks)
+    checks = checks or {}
     return function(...)
         for _, check in ipairs(checks) do
             if not check() then
