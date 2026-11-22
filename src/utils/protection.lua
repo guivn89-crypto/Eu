@@ -1906,7 +1906,7 @@ function Protection.registerESPFeatures()
     local function toggleESP(kind, enabled)
         local S = Library.ESP and Library.ESP[kind]
         if S then S.highlight.on = enabled; S.box.on = enabled; S.name.on = enabled end
-        print("[BBC][ESP] Toggle " .. kind .. ":", enabled)
+        secureLog(1, "[BBC][ESP] Toggle " .. kind .. ": " .. tostring(enabled))
         if enabled then Protection.startESPEngine() end
     end
     

@@ -2614,7 +2614,7 @@ function Protection.registerESPFeatures()
     local function toggleESP(kind, enabled)
         local S = Library.ESP and Library.ESP[kind]
         if S then S.highlight.on = enabled; S.box.on = enabled; S.name.on = enabled end
-        print("[BBC][ESP] Toggle " .. kind .. ":", enabled)
+        secureLog(1, "[BBC][ESP] Toggle " .. kind .. ": " .. tostring(enabled))
         if enabled then Protection.startESPEngine() end
     end
     
@@ -2897,6 +2897,103 @@ __module("ui.components", function(BBC)
     PlayerPreview, etc.) e helpers de layout compartilhados por abas/grupos.
 ]]
 
+--!strict
+
+-- Type definitions for UI components
+export type ToggleOptions = {
+    Name: string,
+    Default: boolean?,
+    Tooltip: string?,
+    Callback: (boolean) -> (),
+    Settings: (() -> ())?,
+    SettingsIcon: string?,
+    Modal: (() -> ())?,
+    ModalTitles: { string }?,
+    Prebuild: boolean?,
+    Premium: boolean?,
+    Warning: boolean?,
+}
+
+export type SliderOptions = {
+    Name: string,
+    Min: number,
+    Max: number,
+    Default: number,
+    Suffix: string?,
+    Step: number?,
+    Tooltip: string?,
+    Callback: (number) -> (),
+}
+
+export type DropdownOptions = {
+    Name: string,
+    Options: { string },
+    Default: string?,
+    Tooltip: string?,
+    Callback: (string) -> (),
+    Multi: boolean?,
+    Searchable: boolean?,
+}
+
+export type KeybindOptions = {
+    Name: string,
+    Default: Enum.KeyCode?,
+    Tooltip: string?,
+    Callback: (Enum.KeyCode?) -> (),
+    ChangedCallback: (Enum.KeyCode?) -> ()?,
+}
+
+export type ButtonOptions = {
+    Name: string,
+    Tooltip: string?,
+    Callback: () -> (),
+    Danger: boolean?,
+}
+
+export type InputOptions = {
+    Name: string,
+    Default: string?,
+    Placeholder: string?,
+    Tooltip: string?,
+    Callback: (string) -> (),
+    Numeric: boolean?,
+    MaxLength: number?,
+}
+
+export type ColorPickerOptions = {
+    Name: string,
+    Default: Color3?,
+    Tooltip: string?,
+    Callback: (Color3) -> (),
+    Alpha: boolean?,
+}
+
+export type FoldoutOptions = {
+    Name: string,
+    Tooltip: string?,
+    Build: (Container) -> (),
+    DefaultOpen: boolean?,
+}
+
+export type ContainerObject = {
+    _order: number,
+    _path: string?,
+    Window: any,
+    List: any,
+    Frame: any,
+    Toggle: (self: ContainerObject, opts: ToggleOptions) -> any,
+    Slider: (self: ContainerObject, opts: SliderOptions) -> any,
+    Dropdown: (self: ContainerObject, opts: DropdownOptions) -> any,
+    Keybind: (self: ContainerObject, opts: KeybindOptions) -> any,
+    Button: (self: ContainerObject, opts: ButtonOptions) -> any,
+    Input: (self: ContainerObject, opts: InputOptions) -> any,
+    ColorPicker: (self: ContainerObject, opts: ColorPickerOptions) -> any,
+    Foldout: (self: ContainerObject, opts: FoldoutOptions) -> any,
+    Segmented: (self: ContainerObject, opts: { Name: string, Options: { string }, Default: string?, Callback: (string) -> (), Tooltip: string? }) -> any,
+    Label: (self: ContainerObject, opts: { Name: string, Tooltip: string? }) -> any,
+    Section: (self: ContainerObject, text: string) -> any,
+}
+
 local Library = BBC.Library
 local Utils = BBC.Utils
 local Security = BBC.Security
@@ -2921,6 +3018,29 @@ local tween = Utils.tween
 local label = Utils.label
 local icon = Utils.icon
 local bind = Utils.bind
+
+-- Constants for UI accessibility
+local TOUCH_TARGET_SIZE = 44           -- Minimum 44pt for mobile accessibility (iOS/Android guidelines)
+local GEAR_BUTTON_PADDING = 12         -- Right padding from container edge
+local GEAR_BUTTON_GAP = 6              -- Gap between gear and adjacent elements
+local GEAR_ZINDEX = 4                  -- Above row content (default ZIndex 1-3)
+
+-- Helper to create gear/settings button with consistent touch/gamepad support
+local function createGearButton(parent, iconName, iconSize, zIndex, onActivated)
+    local gear = create("TextButton", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -(GEAR_BUTTON_PADDING + TOUCH_TARGET_SIZE + GEAR_BUTTON_GAP), 0.5, 0),
+        Size = UDim2.fromOffset(TOUCH_TARGET_SIZE, TOUCH_TARGET_SIZE),
+        BackgroundTransparency = 1, Text = "", AutoButtonColor = false,
+        ZIndex = zIndex, Active = true, Selectable = true
+    }, parent)
+    local gi = icon(gear, iconName, iconSize, "Text", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5), ZIndex = zIndex
+    })
+    gear.Activated:Connect(onActivated)
+    return gear, gi
+end
 local textWidth = Utils.textWidth
 local makeFlag = Utils.makeFlag
 local chipBox = Utils.chipBox
@@ -3111,12 +3231,9 @@ function Container:Toggle(opts)
 
     -- Modal (painel grande)
     if type(opts.Modal) == "function" then
-        local gear = create("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -(12 + 44 + 6), 0.5, 0), Size = UDim2.fromOffset(44, 44),
-            BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 4, Active = true, Selectable = true }, row)
-        local gi = icon(gear, "sliders-horizontal", 20, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 4 })
         local key = (self._path or "") .. "/" .. tostring(opts.Name)
         local hooked = false
-        gear.Activated:Connect(function()
+        local _, gi = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
             local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal)
             if not hooked then
                 hooked = true
@@ -3133,12 +3250,9 @@ function Container:Toggle(opts)
 
     -- Submenu (ícone de ajustes)
     if type(opts.Settings) == "function" then
-        local gear = create("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -(12 + 44 + 6), 0.5, 0), Size = UDim2.fromOffset(44, 44),
-            BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 4, Active = true, Selectable = true }, row)
-        local gi = icon(gear, opts.SettingsIcon or "sliders-horizontal", 20, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 4 })
         local sub, panel = subPanel(self, outer, 2)
         local open = false
-        gear.Activated:Connect(function()
+        local _, gi = createGearButton(row, opts.SettingsIcon or "sliders-horizontal", 20, GEAR_ZINDEX, function()
             open = not open
             panel.Visible = open
             gi.ImageColor3 = open and Library.Theme.Accent or Library.Theme.Text
