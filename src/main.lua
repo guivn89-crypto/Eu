@@ -29,8 +29,9 @@ local LocalPlayer = Players.LocalPlayer
 
 Security.init()
 
--- Initialize Protection layer after Library is available
-Protection.init({})
+-- NOTE: Early Protection.init({}) was removed because it ran before ui/theme.lua
+-- initialized Library.Fonts, causing "attempt to index nil with 'Fonts'" error.
+-- Protection is now initialized after Window creation (see line ~541).
 
 -- ============================================================
 --  IDIOMAS (English / Español / Português / 简体中文 / Русский)
@@ -754,13 +755,15 @@ local function SB(grp, name, min, max, def, suffix, step, cfg, key)
         Callback = function(v) bind(cfg, key, v) end })
 end
 
--- ---------- Fontes ----------
+-- ---------- Fonts ----------
 local FONT_URLS = {
     ["Press Start 2P"] = { Name = "PressStart2P", Weights = { Regular = "https://raw.githubusercontent.com/google/fonts/main/ofl/pressstart2p/PressStart2P-Regular.ttf" } },
     ["Silkscreen"] = { Name = "Silkscreen", Weights = {
         Regular = "https://raw.githubusercontent.com/google/fonts/main/ofl/silkscreen/Silkscreen-Regular.ttf",
         Bold = "https://raw.githubusercontent.com/google/fonts/main/ofl/silkscreen/Silkscreen-Bold.ttf" } },
 }
+local FontUtils = BBC.Modules["utils.fonts"]
+
 local function retagFonts(root)
     for _, d in ipairs(root:GetDescendants()) do
         if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
@@ -775,15 +778,15 @@ local function retagFonts(root)
 end
 local function setFont(name)
     if name == "Arimo" then
-        Library.Fonts.Regular = Font.new("rbxasset://fonts/families/Arimo.json", Enum.FontWeight.Regular)
-        Library.Fonts.Medium = Font.new("rbxasset://fonts/families/Arimo.json", Enum.FontWeight.Medium)
-        Library.Fonts.Bold = Font.new("rbxasset://fonts/families/Arimo.json", Enum.FontWeight.Bold)
+        Library.Fonts.Regular = FontUtils.safeFontNew("rbxasset://fonts/families/Arimo.json", Enum.FontWeight.Regular)
+        Library.Fonts.Medium = FontUtils.safeFontNew("rbxasset://fonts/families/Arimo.json", Enum.FontWeight.Medium)
+        Library.Fonts.Bold = FontUtils.safeFontNew("rbxasset://fonts/families/Arimo.json", Enum.FontWeight.Bold)
     elseif name == "Arcade" or name == "Code" then
         local f = Font.fromEnum(name == "Arcade" and Enum.Font.Arcade or Enum.Font.Code)
         Library.Fonts.Regular, Library.Fonts.Medium, Library.Fonts.Bold = f, f, f
     elseif FONT_URLS[name] then
         if not Library:LoadFont(FONT_URLS[name]) then
-            BBC.notify("Fonte indisponível neste executor (precisa de writefile e getcustomasset).")
+            BBC.notify("Font unavailable in this executor (requires writefile and getcustomasset).")
             return
         end
     else

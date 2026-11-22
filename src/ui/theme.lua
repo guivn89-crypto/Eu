@@ -72,19 +72,17 @@ function Library:_kbChanged()
     for _, fn in ipairs(Library._kbListeners) do pcall(fn) end
 end
 
--- ---------- Fontes ----------
-Library.Fonts = {
-    Regular = Font.new("rbxasset://fonts/families/Arimo.json", Enum.FontWeight.Regular),
-    Medium = Font.new("rbxasset://fonts/families/Arimo.json", Enum.FontWeight.Medium),
-    Bold = Font.new("rbxasset://fonts/families/Arimo.json", Enum.FontWeight.Bold),
-}
+-- ---------- Fonts (robust initialization with fallback for Delta executor) ----------
+local FontUtils = BBC.Modules["utils.fonts"]
+
+Library.Fonts = FontUtils.initDefaultFonts()
 local FONT_WEIGHTS = {
     Regular = { 400, Enum.FontWeight.Regular }, Medium = { 500, Enum.FontWeight.Medium },
     SemiBold = { 600, Enum.FontWeight.SemiBold }, Bold = { 700, Enum.FontWeight.Bold },
 }
 function Library:LoadFont(opts)
     if type(writefile) ~= "function" or type(isfile) ~= "function" or typeof(getcustomasset) ~= "function" then
-        warn("[BBC] fontes personalizadas precisam de writefile, isfile e getcustomasset")
+        warn("[BBC] custom fonts require writefile, isfile, and getcustomasset")
         return false
     end
     local name = opts.Name or "CustomFont"
@@ -110,7 +108,13 @@ function Library:LoadFont(opts)
     local family = getcustomasset(familyPath)
     local function face(w, fallback)
         local info = FONT_WEIGHTS[w]
-        if info and weights[w] then return Font.new(family, info[2]) end
+        if info and weights[w] then
+            local ok, font = pcall(function()
+                return Font.new(family, info[2])
+            end)
+            if ok and font then return font end
+            warn("[BBC] Failed to load custom font weight: " .. w .. ", using fallback")
+        end
         return fallback
     end
     Library.Fonts.Regular = face("Regular", Library.Fonts.Regular)

@@ -1452,6 +1452,10 @@ function Protection.startESPEngine()
         return
     end
     
+    -- Defensive: ensure Library.Fonts exists (should be initialized by ui/theme.lua)
+    local FontUtils = BBC.Modules["utils.fonts"]
+    FontUtils.ensureFonts(Library)
+    
     Library.ESP = Library.ESP or {}
     Library.Features = Library.Features or {}
     Library.FS = Library.FS or {}
