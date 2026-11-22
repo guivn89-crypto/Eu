@@ -13,6 +13,12 @@ local S = Controls.S
 local Library = BBC.Library
 local Utils = BBC.Utils
 
+-- Defensive: Ensure Library.Fonts exists before any UI code accesses it
+local InitUtils = BBC.Modules["utils.init"]
+if InitUtils and InitUtils.ensureFonts then
+    InitUtils.ensureFonts(Library)
+end
+
 local create = Utils.create
 local corner = Utils.corner
 local stroke = Utils.stroke

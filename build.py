@@ -25,6 +25,7 @@ MODULES = [
     ("utils/security.lua", "utils.security"),
     ("utils/drawing.lua", "utils.drawing"),
     ("utils/fonts.lua", "utils.fonts"),
+    ("utils/init.lua", "utils.init"),
     ("utils/protection.lua", "utils.protection"),
     ("ui/theme.lua", "ui.theme"),
     ("ui/components.lua", "ui.components"),

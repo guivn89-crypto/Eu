@@ -16,6 +16,12 @@ local LocalPlayer = Players.LocalPlayer
 local Security = BBC.Security
 local safeCall = Security.safeCall
 
+-- Defensive: Ensure Library.Fonts exists before any UI code accesses it
+local InitUtils = BBC.Modules["utils.init"]
+if InitUtils and InitUtils.ensureFonts then
+    InitUtils.ensureFonts(BBC.Library)
+end
+
 -- ---------- Instâncias ----------
 function Utils.create(class, props, parent)
     local instance = Instance.new(class)

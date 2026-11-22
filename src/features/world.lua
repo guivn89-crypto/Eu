@@ -10,6 +10,12 @@ local Controls = BBC.UI.Controls
 local T = Controls.T
 local S = Controls.S
 
+-- Defensive: Ensure Library.Fonts exists before any UI code accesses it
+local InitUtils = BBC.Modules["utils.init"]
+if InitUtils and InitUtils.ensureFonts then
+    InitUtils.ensureFonts(BBC.Library)
+end
+
 -- ---------- Servidores (buildServers) ----------
 local function buildServers(tab)
     local Library = BBC.Library

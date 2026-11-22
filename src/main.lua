@@ -22,6 +22,12 @@ if not Utils.create then
     warn("[BBC] Utils not loaded, UI elements may not render")
 end
 
+-- Defensive: Ensure Library.Fonts exists before any UI code accesses it
+local InitUtils = BBC.Modules["utils.init"]
+if InitUtils and InitUtils.ensureFonts then
+    InitUtils.ensureFonts(Library)
+end
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
