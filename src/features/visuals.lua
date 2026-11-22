@@ -13,6 +13,7 @@ local S = Controls.S
 local Library = BBC.Library
 local Utils = BBC.Utils
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 -- Defensive: Ensure Library.Fonts exists before any UI code accesses it
 local InitUtils = BBC.Modules["utils.init"]
@@ -26,12 +27,16 @@ local stroke = Utils.stroke
 local bind = Utils.bind
 local label = Utils.label
 local icon = Utils.icon
+local pad = Utils.pad
+local listLayout = Utils.listLayout
+local tween = Utils.tween
 
 -- ============================================================
 --  SetupCharacterPreview: 2D R6 Chams/ESP Preview Builder
 --  Injeta a pré-visualização dentro de um Frame existente (previewContainer)
 -- ============================================================
 local function SetupCharacterPreview(previewContainer)
+    -- Colors
     local CHAMS_COLOR = Color3.fromRGB(255, 130, 0)
     local CHAMS_TRANSPARENCY = 0.45
     local STROKE_COLOR = Color3.fromRGB(255, 165, 0)
@@ -153,15 +158,11 @@ local function SetupCharacterPreview(previewContainer)
     }
 
     local function buildSkeleton()
-        -- Head -> Neck -> Pelvis
         drawLine(joints.HeadTop, joints.Neck)
         drawLine(joints.Neck, joints.Pelvis)
-        -- Shoulders
         drawLine(joints.LeftShoulder, joints.RightShoulder)
-        -- Arms
         drawLine(joints.LeftShoulder, joints.LeftHand)
         drawLine(joints.RightShoulder, joints.RightHand)
-        -- Legs
         drawLine(joints.Pelvis, joints.LeftFoot)
         drawLine(joints.Pelvis, joints.RightFoot)
     end
@@ -173,7 +174,7 @@ local function SetupCharacterPreview(previewContainer)
         BackgroundColor3 = HEALTH_BAR_BG,
         BackgroundTransparency = 0.35,
         BorderSizePixel = 0,
-        Size = UDim2.fromOffset(HEALTH_BAR_WIDTH, 0), -- height will be set
+        Size = UDim2.fromOffset(HEALTH_BAR_WIDTH, 0),
         Position = UDim2.fromScale(0, 0),
         AnchorPoint = Vector2.new(1, 0),
         ZIndex = 3,
@@ -384,7 +385,6 @@ local function SetupCharacterPreview(previewContainer)
 
     function controller.SetHealth(enabled)
         state.health = enabled
-        -- Health numeric is shown in health bar fill, no separate label needed in preview
     end
 
     function controller.SetKDR(enabled)
@@ -467,7 +467,7 @@ local function SetupCharacterPreview(previewContainer)
                 dragging = true
                 dragStart = input.Position
                 startPos = element.Position
-                element.ZIndex = 10 -- Bring to front while dragging
+                element.ZIndex = 10
             end
         end)
 
@@ -524,26 +524,131 @@ local function SetupCharacterPreview(previewContainer)
 end
 
 -- ============================================================
---  Build ESP Panel with Preview + Settings
+--  Build ESP Panel with Preview + Settings (Modal Layout)
 -- ============================================================
 local function buildEspPanel(kind)
     return function(m)
         local Library = BBC.Library
         local S = Library.ESP and Library.ESP[kind]
+        if not S then return end
 
         local L = m.Left
         local R = m.Right
 
-        -- Preview Container (Frame onde o preview será injetado)
-        local previewContainer = create("Frame", {
-            Name = "ESPPreviewContainer",
-            AnchorPoint = Vector2.new(0.5, 0),
-            Position = UDim2.new(0.5, 0, 0, 4),
-            Size = UDim2.fromOffset(212, 205),
+        -- ============================================================
+        --  LEFT SIDE: PRÉVIA
+        -- ============================================================
+        -- Header bar with title + 3 action icons
+        local header = create("Frame", {
+            Name = "PreviewHeader",
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 30),
+            Position = UDim2.fromScale(0, 0),
+        }, L)
+        local headerLayout = listLayout(header, 0, Enum.FillDirection.Horizontal)
+        headerLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+        headerLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        pad(header, 8, 8, 0, 0)
+
+        -- Title "PRÉVIA"
+        local titleLabel = label(header, "PRÉVIA", 14, "Text", true, {
+            Size = UDim2.fromOffset(60, 24),
+            TextXAlignment = Enum.TextXAlignment.Left,
+        })
+
+        -- Spacer to push action icons to right
+        local spacer = create("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, -120, 1, 0),
+        }, header)
+
+        -- Action icons container
+        local actionIcons = create("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.fromOffset(90, 24),
+        }, header)
+        local actionLayout = listLayout(actionIcons, 6, Enum.FillDirection.Horizontal)
+        actionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+        actionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+
+        -- Action 1: Mode/List toggle
+        local action1 = create("TextButton", {
+            BackgroundTransparency = 1,
+            Size = UDim2.fromOffset(24, 24),
+            Text = "",
+            AutoButtonColor = false,
+        }, actionIcons)
+        icon(action1, "layout-grid", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
+        corner(action1, 4)
+        -- TODO: Toggle preview mode (list/grid)
+
+        -- Action 2: Lock/Position toggle
+        local action2 = create("TextButton", {
+            BackgroundTransparency = 1,
+            Size = UDim2.fromOffset(24, 24),
+            Text = "",
+            AutoButtonColor = false,
+        }, actionIcons)
+        icon(action2, "lock", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
+        corner(action2, 4)
+        -- TODO: Lock preview position
+
+        -- Action 3: Reset/Star
+        local action3 = create("TextButton", {
+            BackgroundTransparency = 1,
+            Size = UDim2.fromOffset(24, 24),
+            Text = "",
+            AutoButtonColor = false,
+        }, actionIcons)
+        icon(action3, "star", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
+        corner(action3, 4)
+        -- TODO: Reset preview to defaults
+
+        -- Central Preview Frame (dark background with soft glow)
+        local previewFrame = create("Frame", {
+            Name = "PreviewFrame",
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.55),
+            Size = UDim2.fromOffset(200, 210),
+            BackgroundColor3 = Color3.fromRGB(15, 15, 20),
             BorderSizePixel = 0,
             ClipsDescendants = true,
-            BackgroundTransparency = 1,
         }, L)
+        corner(previewFrame, 8)
+        local previewStroke = stroke(previewFrame, "Accent", 0.2, 1)
+        previewStroke.Color = Color3.fromRGB(255, 130, 0)
+
+        -- Soft center glow (gradient)
+        local glow = create("Frame", {
+            Name = "Glow",
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.fromScale(1.2, 1.2),
+            BackgroundTransparency = 1,
+            ZIndex = -1,
+        }, previewFrame)
+        local glowGrad = create("UIGradient", {
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 130, 0)),
+                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 130, 0)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 15, 20)),
+            }),
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.95),
+                NumberSequenceKeypoint.new(0.5, 0.85),
+                NumberSequenceKeypoint.new(1, 1),
+            }),
+            Rotation = 45,
+        }, glow)
+
+        -- Preview Container inside the frame
+        local previewContainer = create("Frame", {
+            Name = "ESPPreviewContainer",
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.fromScale(0.95, 0.95),
+            BackgroundTransparency = 1,
+        }, previewFrame)
 
         -- Build the character preview inside the container
         local previewController = SetupCharacterPreview(previewContainer)
@@ -552,64 +657,36 @@ local function buildEspPanel(kind)
         Library.ESPPreviewControllers = Library.ESPPreviewControllers or {}
         Library.ESPPreviewControllers[kind] = previewController
 
-        -- Background grid (scanner effect)
-        local cv = previewContainer
-        local CVW, CVH = 212, 205
-        for i = 1, 8 do
-            local v = create("Frame", { Position = UDim2.fromOffset(i * 26.5, 0), Size = UDim2.fromOffset(1, CVH), BorderSizePixel = 0, BackgroundTransparency = 0.94 }, cv)
-            bind(v, "BackgroundColor3", "Text")
-        end
-        for i = 1, 6 do
-            local h = create("Frame", { Position = UDim2.fromOffset(0, i * 34), Size = UDim2.fromOffset(CVW, 1), BorderSizePixel = 0, BackgroundTransparency = 0.94 }, cv)
-            bind(h, "BackgroundColor3", "Text")
-        end
-
-        -- Pedestal
-        local shadow = create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, BorderSizePixel = 0 }, cv)
-        local pedBase = create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.62), Size = UDim2.fromScale(1, 0.8), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.25, BorderSizePixel = 0 }, shadow)
-        corner(pedBase, 0, true) -- UICorner with CornerRadius = UDim.new(1, 0)
-        local pedTop = create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.45), Size = UDim2.fromScale(1, 0.8), BorderSizePixel = 0 }, shadow)
-        bind(pedTop, "BackgroundColor3", "Surface2")
-        corner(pedTop, 0, true)
-        local pedStroke = stroke(pedTop, "Accent", 0.1, 1.5)
-        local pedInner = create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(0.62, 0.6), BackgroundTransparency = 1 }, pedTop)
-        corner(pedInner, 0, true)
-        local pedInnerStroke = stroke(pedInner, "Accent", 0.5, 1)
-
-        -- ============================================================
-        --  Quick-Toggle Button Grid at Preview Bottom
-        -- ============================================================
-        local toggleButtonsFrame = create("ScrollingFrame", {
-            Name = "QuickToggles",
+        -- Quick-Toggle Button Grid at Preview Bottom (3 rows x 4 cols)
+        local toggleButtonsFrame = create("Frame", {
+            Name = "QuickTogglesGrid",
             BackgroundTransparency = 1,
-            BorderSizePixel = 0,
             AnchorPoint = Vector2.new(0.5, 1),
             Position = UDim2.fromScale(0.5, 1),
-            Size = UDim2.new(1, -16, 0, 38),
-            CanvasSize = UDim2.new(0, 0, 0, 0),
-            AutomaticCanvasSize = Enum.AutomaticSize.X,
-            ScrollBarThickness = 3,
-            ScrollingDirection = Enum.ScrollingDirection.X,
-            ClipsDescendants = false,
+            Size = UDim2.new(1, -16, 0, 108),
         }, previewContainer)
-        local toggleList = create("UIListLayout", {
+        local gridLayout = create("UIGridLayout", {
+            CellSize = UDim2.fromOffset(44, 30),
+            CellPadding = UDim2.fromOffset(4, 4),
             FillDirection = Enum.FillDirection.Horizontal,
             HorizontalAlignment = Enum.HorizontalAlignment.Center,
-            Padding = UDim.new(0, 6),
+            VerticalAlignment = Enum.VerticalAlignment.Center,
             SortOrder = Enum.SortOrder.LayoutOrder,
+            StartCorner = Enum.StartCorner.TopLeft,
+            FillDirectionMaxCells = 4,
         }, toggleButtonsFrame)
-        create("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 4) }, toggleButtonsFrame)
+        pad(toggleButtonsFrame, 8, 8, 4, 4)
 
         local quickToggles = {
             { key = "highlight", label = "Destaque", setter = function(v) previewController.SetChams(v) end },
             { key = "box", label = "Caixa", setter = function(v) previewController.SetBox(v) end },
             { key = "name", label = "Nome", setter = function(v) previewController.SetName(v) end },
-            { key = "healthbar", label = "Barra de vida", setter = function(v) previewController.SetHealthBar(v) end },
+            { key = "healthbar", label = "Barra vida", setter = function(v) previewController.SetHealthBar(v) end },
             { key = "health", label = "Vida", setter = function(v) previewController.SetHealth(v) end },
             { key = "distance", label = "Distância", setter = function(v) previewController.SetDistance(v) end },
             { key = "kdr", label = "K/D", setter = function(v) previewController.SetKDR(v) end },
             { key = "reports", label = "Denúncias", setter = function(v) previewController.SetReports(v) end },
-            { key = "tracers", label = "Linhas até alvos", setter = function(v) previewController.SetTracers(v) end },
+            { key = "tracers", label = "Linhas", setter = function(v) previewController.SetTracers(v) end },
             { key = "arrows", label = "Setas", setter = function(v) previewController.SetArrows(v) end },
             { key = "skeleton", label = "Esqueleto", setter = function(v) previewController.SetSkeleton(v) end },
         }
@@ -620,24 +697,29 @@ local function buildEspPanel(kind)
                 Name = "Toggle_" .. tgl.key,
                 BackgroundColor3 = isEnabled and Library.Theme.Accent or Library.Theme.Surface2,
                 BorderSizePixel = 0,
-                Size = UDim2.fromOffset(0, 30),
-                AutomaticSize = Enum.AutomaticSize.X,
+                Size = UDim2.fromOffset(44, 30),
                 Text = tgl.label,
                 TextColor3 = isEnabled and Color3.new(1,1,1) or Library.Theme.Text,
-                TextSize = 10,
+                TextSize = 9,
                 FontFace = Library.Fonts.Medium,
                 TextXAlignment = Enum.TextXAlignment.Center,
                 TextYAlignment = Enum.TextYAlignment.Center,
-                TextWrapped = false,
+                TextWrapped = true,
+                TextScaled = true,
                 TextTruncate = Enum.TextTruncate.None,
                 ClipsDescendants = false,
                 LayoutOrder = i,
+                AutoButtonColor = false,
             }, toggleButtonsFrame)
             corner(btn, 4)
             local btnStroke = stroke(btn, "Stroke", 0, 1)
             btnStroke.Color = isEnabled and Library.Theme.Accent or Library.Theme.Stroke
 
-            local padding = create("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, btn)
+            -- Ensure text doesn't overflow
+            local textConstraint = create("UITextSizeConstraint", {
+                MinTextSize = 7,
+                MaxTextSize = 10,
+            }, btn)
 
             btn.MouseButton1Click:Connect(function()
                 isEnabled = not isEnabled
@@ -646,8 +728,6 @@ local function buildEspPanel(kind)
                 btn.BackgroundColor3 = isEnabled and Library.Theme.Accent or Library.Theme.Surface2
                 btn.TextColor3 = isEnabled and Color3.new(1,1,1) or Library.Theme.Text
                 btnStroke.Color = isEnabled and Library.Theme.Accent or Library.Theme.Stroke
-                -- Sync with right panel toggle (find and update)
-                -- The right panel toggles are created by add() function, they'll update on next render
             end)
 
             -- Bind theme colors
@@ -657,9 +737,77 @@ local function buildEspPanel(kind)
         end
 
         -- ============================================================
-        --  Right Side Settings (bind to preview controller)
+        --  RIGHT SIDE: AJUSTES DO JOGADOR
         -- ============================================================
-        local fold = R:Foldout({ Name = "Configurações gerais", Build = function(p)
+        -- Header with "Ajustes gerais" + gear icon + close button
+        local rightHeader = create("Frame", {
+            Name = "SettingsHeader",
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 32),
+            Position = UDim2.fromScale(0, 0),
+        }, m.RightBox)
+        local rhLayout = listLayout(rightHeader, 0, Enum.FillDirection.Horizontal)
+        rhLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+        rhLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        pad(rightHeader, 8, 8, 0, 0)
+
+        local headerTitle = label(rightHeader, "Ajustes gerais", 14, "Text", true, {
+            Size = UDim2.fromOffset(120, 24),
+            TextXAlignment = Enum.TextXAlignment.Left,
+        })
+
+        -- Gear icon for general settings
+        local gearBtn = create("TextButton", {
+            BackgroundTransparency = 1,
+            Size = UDim2.fromOffset(24, 24),
+            Text = "",
+            AutoButtonColor = false,
+        }, rightHeader)
+        icon(gearBtn, "sliders-horizontal", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
+        corner(gearBtn, 4)
+        -- TODO: Open general settings foldout
+
+        -- Spacer
+        local rhSpacer = create("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, -180, 1, 0),
+        }, rightHeader)
+
+        -- Close button (X) - note: modal already has one, but we keep for consistency
+        local closeBtn = create("TextButton", {
+            BackgroundTransparency = 1,
+            Size = UDim2.fromOffset(24, 24),
+            Text = "",
+            AutoButtonColor = false,
+        }, rightHeader)
+        icon(closeBtn, "x", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
+        corner(closeBtn, 4)
+        closeBtn.Activated:Connect(function()
+            m.Overlay.Visible = false
+        end)
+
+        -- Scrolling content area
+        local rightScroll = create("ScrollingFrame", {
+            Name = "SettingsScroll",
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Position = UDim2.fromOffset(0, 36),
+            Size = UDim2.new(1, 0, 1, -36 - 50), -- Leave space for footer
+            ScrollBarThickness = 2,
+            CanvasSize = UDim2.new(),
+            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            ScrollingDirection = Enum.ScrollingDirection.Y,
+            ClipsDescendants = true,
+        }, m.RightBox)
+        bind(rightScroll, "ScrollBarImageColor3", "Accent")
+        local rsLayout = listLayout(rightScroll, 4)
+        rsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        pad(rightScroll, 8, 8, 4, 4)
+
+        local rightPanel = setmetatable({ List = rightScroll, _order = 0, Window = m.Right.Window, _path = m.Right._path .. "/settings" }, BBC.UI.Container)
+
+        -- General settings foldout
+        local fold = rightPanel:Foldout({ Name = "Configurações gerais", Build = function(p)
             p:Slider({ Name = "Distância máx.", Min = 100, Max = 3000, Default = 1000, Suffix = "m", Step = 50, Callback = function(v) S.maxDist = v end })
             p:Slider({ Name = "Tamanho do texto", Min = 9, Max = 16, Default = 10, Callback = function(v) S.textSize = v end })
             p:Slider({ Name = "Distância da prévia", Min = 10, Max = 2000, Default = 120, Suffix = "m", Step = 10, Callback = function(v) S.prevDist = v; previewController.SetPreviewDistance(v .. "m") end })
@@ -671,8 +819,10 @@ local function buildEspPanel(kind)
                 Settings = function(q) q:ColorPicker({ Name = "Cor", Default = S.nearest.color, Callback = function(c) S.nearest.color = c end }) end })
         end })
 
-        local function add(key, labelText, extra)
-            local toggle = R:Toggle({ Name = labelText, Default = S[key] and S[key].on or false, Callback = function(v)
+        -- Vertical toggle list with gear icons
+        local function addToggle(key, labelText, extraSettings)
+            local isEnabled = S[key] and S[key].on or false
+            local toggle = rightPanel:Toggle({ Name = labelText, Default = isEnabled, Callback = function(v)
                 if S[key] then S[key].on = v end
                 -- Sync with preview controller
                 if key == "highlight" then previewController.SetChams(v)
@@ -697,45 +847,60 @@ local function buildEspPanel(kind)
                         end
                     end })
                 end
-                if extra then extra(p) end
+                if extraSettings then extraSettings(p) end
             end })
         end
 
-        add("highlight", "Destaque", function(p)
+        addToggle("highlight", "Destaque", function(p)
             p:Slider({ Name = "Preenchimento", Min = 5, Max = 90, Default = 60, Suffix = "%", Callback = function(v) if S.highlight then S.highlight.alpha = v / 100 end end })
             p:Slider({ Name = "Contorno", Min = 0, Max = 4, Default = 2, Step = 0.5, Callback = function(v) if S.highlight then S.highlight.outline = v end end })
         end)
-        add("box", "Caixa", function(p)
+        addToggle("box", "Caixa", function(p)
             p:Dropdown({ Name = "Estilo", Options = { "Cantos", "Completa" }, Default = "Completa", Callback = function(v) if S.box then S.box.style = v end end })
             p:Slider({ Name = "Espessura", Min = 1, Max = 5, Default = 1, Callback = function(v) if S.box then S.box.thick = v end end })
             p:Slider({ Name = "Opacidade", Min = 10, Max = 100, Default = 50, Suffix = "%", Callback = function(v) if S.box then S.box.alpha = v / 100 end end })
             p:Slider({ Name = "Tamanho do canto", Min = 6, Max = 30, Default = 14, Callback = function(v) if S.box then S.box.corner = v end end })
         end)
-        add("name", "Nome")
-        add("healthbar", "Barra de vida", function(p)
+        addToggle("name", "Nome")
+        addToggle("healthbar", "Barra de vida", function(p)
             p:Toggle({ Name = "Cor automática", Default = true, Callback = function(v) if S.healthbar then S.healthbar.auto = v end end })
             p:Dropdown({ Name = "Posição", Options = { "Esquerda", "Direita" }, Default = "Esquerda", Callback = function(v) if S.healthbar then S.healthbar.side = v end end })
             p:Slider({ Name = "Largura da barra", Min = 2, Max = 10, Default = 2, Callback = function(v) if S.healthbar then S.healthbar.width = v end end })
         end)
-        add("health", "Vida")
-        add("distance", "Distância", function(p)
+        addToggle("health", "Vida")
+        addToggle("distance", "Distância", function(p)
             p:Dropdown({ Name = "Unidade", Options = { "m", "studs" }, Default = "m", Callback = function(v) if S.distance then S.distance.unit = v end end })
         end)
-        if kind ~= "NPCs" then add("kdr", "K/D"); add("reports", "Denúncias") end
-        add("tracers", "Linhas até alvos", function(p)
+        if kind ~= "NPCs" then
+            addToggle("kdr", "K/D")
+            addToggle("reports", "Denúncias")
+        end
+        addToggle("tracers", "Linhas até alvos", function(p)
             p:Dropdown({ Name = "Origem", Options = { "Baixo", "Cima" }, Default = "Baixo", Callback = function(v) if S.tracers then S.tracers.origin = v end end })
             p:Slider({ Name = "Espessura", Min = 1, Max = 4, Default = 1, Callback = function(v) if S.tracers then S.tracers.thick = v end end })
         end)
-        add("arrows", "Setas", function(p)
+        addToggle("arrows", "Setas", function(p)
             p:Slider({ Name = "Tamanho", Min = 12, Max = 30, Default = 18, Callback = function(v) if S.arrows then S.arrows.size = v end end })
         end)
-        add("skeleton", "Esqueleto", function(p)
+        addToggle("skeleton", "Esqueleto", function(p)
             p:Slider({ Name = "Espessura", Min = 1, Max = 4, Default = 1.5, Step = 0.5, Callback = function(v) if S.skeleton then S.skeleton.thick = v end end })
         end)
 
-        local hint = create("TextLabel", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 8, 1, -4), Size = UDim2.new(1, -16, 0, 34),
-            Text = "TOQUE: ALTERNAR · SEGURE: O QUE É\nTOQUE NO ÍCONE: AJUSTES", TextSize = 10, FontFace = Library.Fonts.Regular, TextWrapped = true }, m.RightBox)
-        bind(hint, "TextColor3", "Muted")
+        -- Fixed footer with touch hints
+        local footer = create("Frame", {
+            Name = "SettingsFooter",
+            BackgroundTransparency = 1,
+            AnchorPoint = Vector2.new(0, 1),
+            Position = UDim2.new(0, 0, 1, -4),
+            Size = UDim2.new(1, -16, 0, 40),
+        }, m.RightBox)
+        local footerLayout = listLayout(footer, 2)
+        footerLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+        footerLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+
+        local hint1 = label(footer, "Toque: ativar", 10, "Muted", false, { Size = UDim2.fromOffset(100, 14), TextXAlignment = Enum.TextXAlignment.Right })
+        local hint2 = label(footer, "Arraste: mover", 10, "Muted", false, { Size = UDim2.fromOffset(100, 14), TextXAlignment = Enum.TextXAlignment.Right })
+        local hint3 = label(footer, "Segure: ajustes", 10, "Muted", false, { Size = UDim2.fromOffset(100, 14), TextXAlignment = Enum.TextXAlignment.Right })
     end
 end
 

@@ -345,7 +345,9 @@ function Container:Toggle(opts)
             if not hooked then
                 hooked = true
                 m.Overlay:GetPropertyChangedSignal("Visible"):Connect(function()
-                    gi.ImageColor3 = m.Overlay.Visible and Library.Theme.Accent or Library.Theme.Text
+                    if gi and gi.ImageColor3 then
+                        gi.ImageColor3 = m.Overlay.Visible and Library.Theme.Accent or Library.Theme.Text
+                    end
                 end)
             end
             m.Overlay.Visible = not m.Overlay.Visible
@@ -362,7 +364,9 @@ function Container:Toggle(opts)
         local _, gi = createGearButton(row, opts.SettingsIcon or "sliders-horizontal", 20, GEAR_ZINDEX, function()
             open = not open
             panel.Visible = open
-            gi.ImageColor3 = open and Library.Theme.Accent or Library.Theme.Text
+            if gi and gi.ImageColor3 then
+                gi.ImageColor3 = open and Library.Theme.Accent or Library.Theme.Text
+            end
         end)
         obj.SettingsPanel = sub
         safeCall(opts.Settings, sub)

@@ -1621,8 +1621,8 @@ function Protection.startESPEngine()
         d.hl.Enabled = hl.on
         d.hl.FillColor = near and ncol or hl.color
         d.hl.FillTransparency = 1 - hl.alpha
-        d.hl.OutlineColor = Color3.new(0,0,0)
-        d.hl.OutlineTransparency = hl.outline <= 0 and 1 or 0.1
+        d.hl.OutlineColor = Color3.new(0, 0, 0)
+        d.hl.OutlineTransparency = hl.outline <= 0 and 1 or 0  -- Thin dark outline
         
         local distText = (S.distance.unit == "studs") and (math.floor(t.studs) .. " st") or (math.floor(t.m) .. "m")
         
@@ -1745,8 +1745,8 @@ function Protection.startESPEngine()
         d.hl.Enabled = hl.on
         d.hl.FillColor = near and ncol or hl.color
         d.hl.FillTransparency = 1 - hl.alpha
-        d.hl.OutlineColor = Color3.new(0,0,0)
-        d.hl.OutlineTransparency = hl.outline <= 0 and 1 or 0.1
+        d.hl.OutlineColor = Color3.new(0, 0, 0)
+        d.hl.OutlineTransparency = hl.outline <= 0 and 1 or 0  -- Thin dark outline
     end
     
     local function gather(kind, out)

@@ -569,8 +569,8 @@ end
 BBC.Features.buildVisuals(Window)
 
 -- Register ESP preview modals (after visuals builds the buildEspPanel)
-BBC.MODALS["Jogador"] = { build = BBC.Features.buildEspPanel("Jogador"), titles = { Left = "PRÉ-VISUALIZAÇÃO", Right = "CONFIGURAÇÕES DO JOGADOR" } }
-BBC.MODALS["NPCs"] = { build = BBC.Features.buildEspPanel("NPCs"), titles = { Left = "PRÉ-VISUALIZAÇÃO", Right = "CONFIGURAÇÕES DO NPC" } }
+BBC.MODALS["Jogador"] = { build = BBC.Features.buildEspPanel("Jogador"), titles = { Left = "PRÉVIA", Right = "Ajustes gerais" } }
+BBC.MODALS["NPCs"] = { build = BBC.Features.buildEspPanel("NPCs"), titles = { Left = "PRÉVIA", Right = "Ajustes do NPC" } }
 
 BBC.Features.buildPlayer(Window)
 BBC.Features.buildCombat(Window)
