@@ -28,6 +28,9 @@ local LocalPlayer = Players.LocalPlayer
 
 Security.init()
 
+-- Initialize Protection layer after Library is available
+Protection.init({})
+
 -- ============================================================
 --  IDIOMAS (English / Español / Português / 简体中文 / Русский)
 -- ============================================================
@@ -535,6 +538,11 @@ local Window = Library:Window({
 })
 local IS_MOBILE = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 pcall(function() Window:SetToggleButton(true) end)
+
+-- Initialize Protection layer after Library is fully available
+Protection.init({})
+Protection.registerESPFeatures()
+Protection.startESPEngine()
 
 -- Tradução automática
 do
