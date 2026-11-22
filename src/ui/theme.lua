@@ -37,21 +37,7 @@ Library.LootCfg = {}
 Library.RadarCfg = {}
 Library.keys = { menu = "RightShift", cursor = "LeftAlt", zoom = "N" }
 
--- Expose on BBC table for cross-module access
-BBC.FO = Library.FO
-BBC.Features = Library.Features
-BBC.FS = Library.FS
-BBC.SV = Library.SV
-BBC.ESP = Library.ESP
-BBC.LootCfg = Library.LootCfg
-BBC.RadarCfg = Library.RadarCfg
-BBC.keys = Library.keys
-
--- Expose methods on BBC table
-BBC.TerrainColor = Library.TerrainColor
-BBC.Notify = Library.Notify
-
--- Terrain color helper
+-- Terrain color helper (define BEFORE exposing to BBC)
 Library.TerrainColor = function(mat, c)
     pcall(function()
         local Workspace = game:GetService("Workspace")
@@ -66,6 +52,21 @@ Library.Notify = function(opts)
     -- Fallback if Utils not ready
     warn("[BBC] Notify called but Utils not ready: " .. tostring(opts and opts.Content or opts))
 end
+
+-- Expose on BBC table for cross-module access
+BBC.FO = Library.FO
+BBC.Features = Library.Features
+BBC.FS = Library.FS
+BBC.SV = Library.SV
+BBC.ESP = Library.ESP
+BBC.LootCfg = Library.LootCfg
+BBC.RadarCfg = Library.RadarCfg
+BBC.keys = Library.keys
+
+-- Expose methods on BBC table
+BBC.TerrainColor = Library.TerrainColor
+BBC.Notify = Library.Notify
+BBC.notify = Library.Notify  -- alias lowercase for compatibility
 
 function Library:_kbChanged()
     for _, fn in ipairs(Library._kbListeners) do pcall(fn) end

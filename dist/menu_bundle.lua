@@ -2074,21 +2074,7 @@ Library.LootCfg = {}
 Library.RadarCfg = {}
 Library.keys = { menu = "RightShift", cursor = "LeftAlt", zoom = "N" }
 
--- Expose on BBC table for cross-module access
-BBC.FO = Library.FO
-BBC.Features = Library.Features
-BBC.FS = Library.FS
-BBC.SV = Library.SV
-BBC.ESP = Library.ESP
-BBC.LootCfg = Library.LootCfg
-BBC.RadarCfg = Library.RadarCfg
-BBC.keys = Library.keys
-
--- Expose methods on BBC table
-BBC.TerrainColor = Library.TerrainColor
-BBC.Notify = Library.Notify
-
--- Terrain color helper
+-- Terrain color helper (define BEFORE exposing to BBC)
 Library.TerrainColor = function(mat, c)
     pcall(function()
         local Workspace = game:GetService("Workspace")
@@ -2103,6 +2089,21 @@ Library.Notify = function(opts)
     -- Fallback if Utils not ready
     warn("[BBC] Notify called but Utils not ready: " .. tostring(opts and opts.Content or opts))
 end
+
+-- Expose on BBC table for cross-module access
+BBC.FO = Library.FO
+BBC.Features = Library.Features
+BBC.FS = Library.FS
+BBC.SV = Library.SV
+BBC.ESP = Library.ESP
+BBC.LootCfg = Library.LootCfg
+BBC.RadarCfg = Library.RadarCfg
+BBC.keys = Library.keys
+
+-- Expose methods on BBC table
+BBC.TerrainColor = Library.TerrainColor
+BBC.Notify = Library.Notify
+BBC.notify = Library.Notify  -- alias lowercase for compatibility
 
 function Library:_kbChanged()
     for _, fn in ipairs(Library._kbListeners) do pcall(fn) end
@@ -5324,10 +5325,10 @@ function Features.buildWorld(window)
     local mundo = window:Tab({ Name = "MUNDO", Icon = "globe" })
     local g = mundo:Groupbox({ Name = "MUNDO", Icon = "globe", Side = "Left" })
     g:Foldout({ Name = "Cores do terreno", Build = function(p)
-        p:ColorPicker({ Name = "Grama", Default = Color3.fromRGB(72, 160, 76), Callback = function(c) BBC.TerrainColor(Enum.Material.Grass, c) end })
-        p:ColorPicker({ Name = "Areia", Default = Color3.fromRGB(214, 190, 120), Callback = function(c) BBC.TerrainColor(Enum.Material.Sand, c) end })
-        p:ColorPicker({ Name = "Rocha", Default = Color3.fromRGB(120, 120, 126), Callback = function(c) BBC.TerrainColor(Enum.Material.Rock, c) end })
-        p:ColorPicker({ Name = "Terra", Default = Color3.fromRGB(110, 78, 52), Callback = function(c) BBC.TerrainColor(Enum.Material.Ground, c) end })
+        p:ColorPicker({ Name = "Grama", Default = Color3.fromRGB(72, 160, 76), Callback = function(c) if BBC.TerrainColor then BBC.TerrainColor(Enum.Material.Grass, c) end end })
+        p:ColorPicker({ Name = "Areia", Default = Color3.fromRGB(214, 190, 120), Callback = function(c) if BBC.TerrainColor then BBC.TerrainColor(Enum.Material.Sand, c) end end })
+        p:ColorPicker({ Name = "Rocha", Default = Color3.fromRGB(120, 120, 126), Callback = function(c) if BBC.TerrainColor then BBC.TerrainColor(Enum.Material.Rock, c) end end })
+        p:ColorPicker({ Name = "Terra", Default = Color3.fromRGB(110, 78, 52), Callback = function(c) if BBC.TerrainColor then BBC.TerrainColor(Enum.Material.Ground, c) end end })
     end })
     g:Foldout({ Name = "Folhas", Build = function(p)
         p:ColorPicker({ Name = "Cor das folhas", Default = Color3.fromRGB(70, 150, 70), Callback = function(c) end })
@@ -5335,7 +5336,7 @@ function Features.buildWorld(window)
     g:Foldout({ Name = "Troncos", Build = function(p)
         p:ColorPicker({ Name = "Cor dos troncos", Default = Color3.fromRGB(100, 70, 45), Callback = function(c) end })
     end })
-    g:ColorPicker({ Name = "Cor da água", Default = Color3.fromRGB(40, 70, 75), Callback = function(c) BBC.TerrainColor("Water", c) end })
+    g:ColorPicker({ Name = "Cor da água", Default = Color3.fromRGB(40, 70, 75), Callback = function(c) if BBC.TerrainColor then BBC.TerrainColor("Water", c) end end })
     T(g, "Sem grama"); T(g, "Desativar minas", true)
     g = mundo:Groupbox({ Name = "RECURSOS", Icon = "puzzle", Side = "Left" })
     T(g, "Carregar jogadores"); T(g, "Buscar chefes"); T(g, "Pontos de saída", true)
