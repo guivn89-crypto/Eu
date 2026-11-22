@@ -1380,8 +1380,14 @@ function Protection.init(config)
     -- Environment validation
     local envOk, envChecks = Protection.validateEnvironment()
 
-    -- Get protection level
-    local level, desc, pct = Protection.getProtectionLevel()
+    -- Get protection level (with nil safety)
+    local level, desc, pct = 1, "Básico (fallback)", 0
+    if type(Protection.getProtectionLevel) == "function" then
+        local ok, l, d, p = pcall(Protection.getProtectionLevel)
+        if ok and l then level, desc, pct = l, d, p end
+    else
+        secureLog(2, "Protection.getProtectionLevel is nil or not a function")
+    end
     secureLog(1, string.format("Protection Level: %d - %s (%.0f%%)", level, desc, pct * 100))
 
     -- Start periodic checks

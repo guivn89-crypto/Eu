@@ -804,14 +804,20 @@ do
     task.spawn(function()
         task.wait(1) -- wait for Protection.init()
         local prot = BBC.Protection
-        if prot then
+        if prot and type(prot.getProtectionLevel) == "function" then
             protInfo.Set("Executor: " .. (prot.Executor or "Unknown"))
-            local level, desc = prot.getProtectionLevel()
-            protLevel.Set("Nível: " .. level .. " - " .. desc)
+            local ok, level, desc = pcall(prot.getProtectionLevel)
+            if ok and level then
+                protLevel.Set("Nível: " .. level .. " - " .. desc)
+            else
+                protLevel.Set("Nível: Erro ao obter nível")
+            end
             local caps = prot.Capabilities or {}
             local count = 0
             for _, v in pairs(caps) do if v then count = count + 1 end end
             protCaps.Set("APIs disponíveis: " .. count .. "/" .. (function() local c=0 for _ in pairs(caps) do c=c+1 end return c end)())
+        elseif prot then
+            protLevel.Set("Nível: getProtectionLevel indisponível")
         end
     end)
 end

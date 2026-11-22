@@ -1953,8 +1953,14 @@ function Protection.init(config)
     -- Environment validation
     local envOk, envChecks = Protection.validateEnvironment()
 
-    -- Get protection level
-    local level, desc, pct = Protection.getProtectionLevel()
+    -- Get protection level (with nil safety)
+    local level, desc, pct = 1, "Básico (fallback)", 0
+    if type(Protection.getProtectionLevel) == "function" then
+        local ok, l, d, p = pcall(Protection.getProtectionLevel)
+        if ok and l then level, desc, pct = l, d, p end
+    else
+        secureLog(2, "Protection.getProtectionLevel is nil or not a function")
+    end
     secureLog(1, string.format("Protection Level: %d - %s (%.0f%%)", level, desc, pct * 100))
 
     -- Start periodic checks
@@ -6200,14 +6206,20 @@ do
     task.spawn(function()
         task.wait(1) -- wait for Protection.init()
         local prot = BBC.Protection
-        if prot then
+        if prot and type(prot.getProtectionLevel) == "function" then
             protInfo.Set("Executor: " .. (prot.Executor or "Unknown"))
-            local level, desc = prot.getProtectionLevel()
-            protLevel.Set("Nível: " .. level .. " - " .. desc)
+            local ok, level, desc = pcall(prot.getProtectionLevel)
+            if ok and level then
+                protLevel.Set("Nível: " .. level .. " - " .. desc)
+            else
+                protLevel.Set("Nível: Erro ao obter nível")
+            end
             local caps = prot.Capabilities or {}
             local count = 0
             for _, v in pairs(caps) do if v then count = count + 1 end end
             protCaps.Set("APIs disponíveis: " .. count .. "/" .. (function() local c=0 for _ in pairs(caps) do c=c+1 end return c end)())
+        elseif prot then
+            protLevel.Set("Nível: getProtectionLevel indisponível")
         end
     end)
 end
