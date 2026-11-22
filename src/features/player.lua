@@ -376,4 +376,4 @@ function Features.buildPlayer(window)
     return jogador
 end
 
-return Features.buildPlayer
+return { buildPlayer = Features.buildPlayer }

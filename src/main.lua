@@ -937,4 +937,4 @@ Library.RadarCfg = Library.RadarCfg or {}
 pcall(function() Window:FinishLoading() end)
 Library:Notify({ Title = "BBC HUB", Content = tr("Interface carregada."), Duration = 4 })
 
-return BBC
+-- return BBC  -- handled by build.py FOOTER

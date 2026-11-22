@@ -56,6 +56,17 @@ local function newOuter(self, name)
     return outer
 end
 
+-- ---------- subPanel helper (moved up for forward reference) ----------
+local function subPanel(self, parentOuter, order)
+    local panel = create("Frame", { Size = UDim2.new(1, -16, 0, 0), Position = UDim2.fromOffset(8, 0), AutomaticSize = Enum.AutomaticSize.Y, BorderSizePixel = 0, Visible = false, LayoutOrder = order }, parentOuter)
+    bind(panel, "BackgroundColor3", "Surface2")
+    corner(panel, 4); stroke(panel, "Stroke", 0.3)
+    local inner = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, panel)
+    pad(inner, 0, 0, 3, 3); listLayout(inner, 0)
+    local sub = setmetatable({ List = inner, _order = 0, Window = self.Window, _path = (self._path or "") .. "/sub", Frame = panel }, Container)
+    return sub, panel
+end
+
 -- ---------- Toggle ----------
 function Container:Toggle(opts)
     opts = opts or {}

@@ -894,6 +894,32 @@ function Protection.cacheOriginalEnvironment()
     end
 end
 
+function Protection.validateEnvironment()
+    local env = getgenv and getgenv() or _G
+    local checks = {
+        validGame = typeof(game) == "Instance",
+        validWorkspace = typeof(workspace) == "Instance",
+        validPlayers = typeof(Players) == "Instance",
+        validLocalPlayer = Players.LocalPlayer ~= nil,
+        validRunService = typeof(RunService) == "Instance",
+        validHttpService = typeof(HttpService) == "Instance",
+        hasGetGenV = type(getgenv) == "function",
+        hasGetRenV = type(getrenv) == "function",
+    }
+
+    local passed = 0
+    local total = 0
+    for name, result in pairs(checks) do
+        total = total + 1
+        if result then passed = passed + 1 else secureLog(2, "Env check failed: " .. name) end
+    end
+
+    local score = passed / total
+    secureLog(1, string.format("Environment validation: %.0f%% (%d/%d)", score * 100, passed, total))
+
+    return score >= 0.8, checks
+end
+
 function Protection._hashFunction(fn)
     -- Simple hash of function identity (address-based approximation)
     return tostring(fn):sub(-16)
@@ -2218,6 +2244,17 @@ local function newOuter(self, name)
     outer:SetAttribute("SearchName", name or "")
     listLayout(outer, 0)
     return outer
+end
+
+-- ---------- subPanel helper (moved up for forward reference) ----------
+local function subPanel(self, parentOuter, order)
+    local panel = create("Frame", { Size = UDim2.new(1, -16, 0, 0), Position = UDim2.fromOffset(8, 0), AutomaticSize = Enum.AutomaticSize.Y, BorderSizePixel = 0, Visible = false, LayoutOrder = order }, parentOuter)
+    bind(panel, "BackgroundColor3", "Surface2")
+    corner(panel, 4); stroke(panel, "Stroke", 0.3)
+    local inner = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, panel)
+    pad(inner, 0, 0, 3, 3); listLayout(inner, 0)
+    local sub = setmetatable({ List = inner, _order = 0, Window = self.Window, _path = (self._path or "") .. "/sub", Frame = panel }, Container)
+    return sub, panel
 end
 
 -- ---------- Toggle ----------
@@ -4468,7 +4505,7 @@ function Features.buildVisuals(window)
     return visuals
 end
 
-return Features.buildVisuals
+return { buildVisuals = Features.buildVisuals }
 
 end)
 
@@ -4854,7 +4891,7 @@ function Features.buildPlayer(window)
     return jogador
 end
 
-return Features.buildPlayer
+return { buildPlayer = Features.buildPlayer }
 
 end)
 
@@ -4911,7 +4948,7 @@ function Features.buildCombat(window)
     return combate
 end
 
-return Features.buildCombat
+return { buildCombat = Features.buildCombat }
 
 end)
 
@@ -5322,7 +5359,7 @@ Features.buildSkinsTab = Features.buildSkins
 Features.buildQuestsTab = Features.buildQuests
 Features.buildMerchantsTab = Features.buildMerchants
 
-return Features.buildWorld
+return { buildWorld = Features.buildWorld }
 
 end)
 
@@ -6269,7 +6306,7 @@ Library.RadarCfg = Library.RadarCfg or {}
 pcall(function() Window:FinishLoading() end)
 Library:Notify({ Title = "BBC HUB", Content = tr("Interface carregada."), Duration = 4 })
 
-return BBC
+-- return BBC  -- handled by build.py FOOTER
 
 end)
 

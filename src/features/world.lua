@@ -401,4 +401,4 @@ Features.buildSkinsTab = Features.buildSkins
 Features.buildQuestsTab = Features.buildQuests
 Features.buildMerchantsTab = Features.buildMerchants
 
-return Features.buildWorld
+return { buildWorld = Features.buildWorld }

@@ -321,6 +321,32 @@ function Protection.cacheOriginalEnvironment()
     end
 end
 
+function Protection.validateEnvironment()
+    local env = getgenv and getgenv() or _G
+    local checks = {
+        validGame = typeof(game) == "Instance",
+        validWorkspace = typeof(workspace) == "Instance",
+        validPlayers = typeof(Players) == "Instance",
+        validLocalPlayer = Players.LocalPlayer ~= nil,
+        validRunService = typeof(RunService) == "Instance",
+        validHttpService = typeof(HttpService) == "Instance",
+        hasGetGenV = type(getgenv) == "function",
+        hasGetRenV = type(getrenv) == "function",
+    }
+
+    local passed = 0
+    local total = 0
+    for name, result in pairs(checks) do
+        total = total + 1
+        if result then passed = passed + 1 else secureLog(2, "Env check failed: " .. name) end
+    end
+
+    local score = passed / total
+    secureLog(1, string.format("Environment validation: %.0f%% (%d/%d)", score * 100, passed, total))
+
+    return score >= 0.8, checks
+end
+
 function Protection._hashFunction(fn)
     -- Simple hash of function identity (address-based approximation)
     return tostring(fn):sub(-16)

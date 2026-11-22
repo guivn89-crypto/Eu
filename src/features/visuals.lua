@@ -424,4 +424,4 @@ function Features.buildVisuals(window)
     return visuals
 end
 
-return Features.buildVisuals
+return { buildVisuals = Features.buildVisuals }

@@ -47,4 +47,4 @@ function Features.buildCombat(window)
     return combate
 end
 
-return Features.buildCombat
+return { buildCombat = Features.buildCombat }
