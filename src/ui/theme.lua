@@ -24,6 +24,7 @@ Library.Theme = {}
 Library.Access = "FREE"
 Library.Keybinds = {}
 Library._kbListeners = {}
+Library._toggleBinds = {}
 Library.Tr = function(t) return t end
 
 function Library:_kbChanged()

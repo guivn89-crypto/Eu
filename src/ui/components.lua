@@ -703,8 +703,11 @@ function Controls.T(tab, name, default, tip)
     local SETTINGS_ICON = BBC.SETTINGS_ICON or {}
     local MODALS = BBC.MODALS or {}
     local TIPS = BBC.TIPS or {}
+    local Lib = BBC.Library or {}
+    local FS = Lib.FS or {}
+    local Features = Lib.Features or {}
     local o = { Name = name, Default = default or false, Tooltip = tip or TIPS[name],
-        Callback = function(v) BBC.Library.FS[name] = v; local f = BBC.Library.Features[name]; if f then f(v) end end }
+        Callback = function(v) FS[name] = v; local f = Features[name]; if f then f(v) end end }
     if GEARS[name] then o.Settings = BBC.buildSettings(name); o.SettingsIcon = SETTINGS_ICON[name] end
     if MODALS[name] then o.Modal = MODALS[name].build; o.ModalTitles = MODALS[name].titles; o.Settings = nil; o.Prebuild = true end
     if PREMIUM[name] then o.Premium = true end
@@ -713,7 +716,9 @@ function Controls.T(tab, name, default, tip)
 end
 
 function Controls.S(tab, name, min, max, default, suffix, step)
-    return tab:Slider({ Name = name, Min = min, Max = max, Default = default, Suffix = suffix or "", Step = step or 1, Tooltip = (BBC.TIPS or {})[name], Callback = function(v) BBC.Library.SV[name] = v end })
+    local Lib = BBC.Library or {}
+    local SV = Lib.SV or {}
+    return tab:Slider({ Name = name, Min = min, Max = max, Default = default, Suffix = suffix or "", Step = step or 1, Tooltip = (BBC.TIPS or {})[name], Callback = function(v) SV[name] = v end })
 end
 
 BBC.UI = BBC.UI or {}

@@ -14,7 +14,7 @@ local T = Controls.T
 local S = Controls.S
 
 -- Verify critical dependencies
-if not Library.Library then
+if not Library or not Library.Windows then
     warn("[BBC] Library not loaded, some features may not work")
 end
 if not Utils.create then

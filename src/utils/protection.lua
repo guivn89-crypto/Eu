@@ -136,6 +136,7 @@ local EXECUTOR_SIGNATURES = {
     },
     UNC = {
         globals = { "getgenv", "getrenv", "getsenv", "getfenv", "setthreadidentity", "getthreadidentity", "clonefunction", "hookfunction", "hookmetamethod", "checkcaller", "iscclosure", "islclosure", "newcclosure", "getgc", "getreg", "getloadedmodules", "getscripts", "getnilinstances", "gethiddenproperty", "sethiddenproperty", "fireclickdetector", "fireproximityprompt", "getconnections", "setclipboard", "getcustomasset", "queue_on_teleport", "request", "httpget", "httppost", "rconsoleprint", "rconsolewarn", "rconsoleerr", "rconsoleinfo" },
+        functions = { "getgenv", "getrenv", "getsenv", "getfenv", "setthreadidentity", "getthreadidentity", "clonefunction", "hookfunction", "hookmetamethod", "checkcaller", "iscclosure", "islclosure", "newcclosure", "getgc", "getreg", "getloadedmodules", "getscripts", "getnilinstances", "gethiddenproperty", "sethiddenproperty", "fireclickdetector", "fireproximityprompt", "getconnections", "setclipboard", "getcustomasset", "queue_on_teleport", "request", "httpget", "httppost", "rconsoleprint", "rconsolewarn", "rconsoleerr", "rconsoleinfo" },
         identity = 6,
         unc_support = 0.60,
         version_check = function() return "UNC Generic" end,
@@ -151,12 +152,12 @@ function Protection.detectExecutor()
 
     for name, sig in pairs(EXECUTOR_SIGNATURES) do
         local score = 0
-        for _, globalName in ipairs(sig.globals) do
+        for _, globalName in ipairs(sig.globals or {}) do
             if env[globalName] ~= nil then
                 score = score + 2
             end
         end
-        for _, funcName in ipairs(sig.functions) do
+        for _, funcName in ipairs(sig.functions or {}) do
             local parts = string.split(funcName, ".")
             local current = env
             local found = true
