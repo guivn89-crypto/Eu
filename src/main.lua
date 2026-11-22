@@ -566,8 +566,8 @@ do
 end
 
 -- Register ESP preview modals BEFORE building visuals tab (so Controls.T can find them)
-BBC.MODALS["Jogador"] = { build = BBC.Features.buildEspPanel("Jogador"), titles = { Left = "PRÉVIA", Right = "Ajustes gerais" } }
-BBC.MODALS["NPCs"] = { build = BBC.Features.buildEspPanel("NPCs"), titles = { Left = "PRÉVIA", Right = "Ajustes do NPC" } }
+BBC.MODALS["Jogador"] = { build = BBC.Features.buildEspPanel("Jogador"), titles = { Left = "PRÉVIA", Right = "Ajustes gerais" }, headerExtras = { leftActions = { { icon = "layout-grid", callback = function() end }, { icon = "lock", callback = function() end }, { icon = "star", callback = function() end } }, rightActions = { { icon = "sliders-horizontal", callback = function() end }, { icon = "x", callback = function(m) m.Overlay.Visible = false end } } } }
+BBC.MODALS["NPCs"] = { build = BBC.Features.buildEspPanel("NPCs"), titles = { Left = "PRÉVIA", Right = "Ajustes do NPC" }, headerExtras = { leftActions = { { icon = "layout-grid", callback = function() end }, { icon = "lock", callback = function() end }, { icon = "star", callback = function() end } }, rightActions = { { icon = "sliders-horizontal", callback = function() end }, { icon = "x", callback = function(m) m.Overlay.Visible = false end } } } }
 
 -- ---------- Features ----------
 BBC.Features.buildVisuals(Window)

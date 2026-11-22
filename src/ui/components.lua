@@ -341,7 +341,7 @@ function Container:Toggle(opts)
         local key = (self._path or "") .. "/" .. tostring(opts.Name)
         local hooked = false
         local modalBtn = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
-            local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal)
+            local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras)
             if not hooked then
                 hooked = true
                 m.Overlay:GetPropertyChangedSignal("Visible"):Connect(function()
@@ -359,7 +359,7 @@ function Container:Toggle(opts)
         row.MouseButton1Click:Connect(function()
             if row:GetAttribute("TipHeld") then return end
             if locked then return end
-            local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal)
+            local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras)
             if not hooked then
                 hooked = true
                 m.Overlay:GetPropertyChangedSignal("Visible"):Connect(function()
@@ -371,7 +371,7 @@ function Container:Toggle(opts)
             m.Overlay.Visible = not m.Overlay.Visible
         end)
         if opts.Prebuild then
-            task.defer(function() pcall(function() self.Window:_getModal(key, opts.ModalTitles, opts.Modal) end) end)
+            task.defer(function() pcall(function() self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras) end) end)
         end
     end
 
@@ -867,7 +867,7 @@ function Controls.T(tab, name, default, tip)
     local o = { Name = name, Default = default or false, Tooltip = tip or TIPS[name],
         Callback = function(v) FS[name] = v; local f = Features[name]; if f then f(v) end end }
     if GEARS[name] then o.Settings = BBC.buildSettings(name); o.SettingsIcon = SETTINGS_ICON[name] end
-    if MODALS[name] then o.Modal = MODALS[name].build; o.ModalTitles = MODALS[name].titles; o.Settings = nil; o.Prebuild = true end
+    if MODALS[name] then o.Modal = MODALS[name].build; o.ModalTitles = MODALS[name].titles; o.ModalHeaderExtras = MODALS[name].headerExtras; o.Settings = nil; o.Prebuild = true end
     if PREMIUM[name] then o.Premium = true end
     if name == "Buscar chefes" then o.Warning = true end
     return tab:Toggle(o)

@@ -143,26 +143,81 @@ function Tab:Groupbox(opts)
     return setmetatable({ List = body, _order = 0, Window = self.Window, _path = self._path .. "/" .. tostring(opts.Name), Frame = box, Checkbox = cbObj }, Container)
 end
 
-function Window:_getModal(key, titles, build)
+function Window:_getModal(key, titles, build, headerExtras)
     self._modals = self._modals or {}
     local m = self._modals[key]
     if m then return m end
     local overlay = create("Frame", { Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, Visible = false, ZIndex = 20 }, self._content)
     bind(overlay, "BackgroundColor3", "Background")
-    local function makeBox(left, title)
+    local function makeBox(left, title, extras)
         local f = create("Frame", { Position = UDim2.new(left and 0 or 0.5, left and 0 or 4, 0, 0), Size = UDim2.new(0.5, -4, 1, 0), BorderSizePixel = 0 }, overlay)
         bind(f, "BackgroundColor3", "Surface"); corner(f, 4)
         local st = create("UIStroke", { Thickness = 1, Transparency = 0.15 }, f); bind(st, "Color", "Accent")
-        label(f, title or "", 12, "Muted", true, { Position = UDim2.fromOffset(12, 0), Size = UDim2.new(1, -50, 0, 28), TextYAlignment = Enum.TextYAlignment.Center })
+        
+        -- Header bar with title + optional extras (action buttons)
+        local header = create("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 28),
+            Position = UDim2.fromScale(0, 0),
+        }, f)
+        local headerLayout = listLayout(header, 6, Enum.FillDirection.Horizontal)
+        headerLayout.HorizontalAlignment = left and Enum.HorizontalAlignment.Left or Enum.HorizontalAlignment.Left
+        headerLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        pad(header, 8, 8, 0, 0)
+        
+        label(header, title or "", 12, "Muted", true, { Size = UDim2.fromOffset(left and 80 or 100, 22), TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Center })
+        
+        -- Add extra buttons if provided
+        if extras then
+            if left and extras.leftActions then
+                local spacer = create("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, -140, 1, 0) }, header)
+                local actionContainer = create("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(#extras.leftActions * 30, 22) }, header)
+                local actionLayout = listLayout(actionContainer, 4, Enum.FillDirection.Horizontal)
+                actionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+                actionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+                for i, btnCfg in ipairs(extras.leftActions) do
+                    local btn = create("TextButton", {
+                        BackgroundTransparency = 1,
+                        Size = UDim2.fromOffset(24, 24),
+                        Text = "",
+                        AutoButtonColor = false,
+                    }, actionContainer)
+                    icon(btn, btnCfg.icon, 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
+                    corner(btn, 4)
+                    if btnCfg.callback then btn.Activated:Connect(btnCfg.callback) end
+                end
+            elseif not left and extras.rightActions then
+                local spacer = create("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, -140, 1, 0) }, header)
+                local actionContainer = create("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(#extras.rightActions * 30, 22) }, header)
+                local actionLayout = listLayout(actionContainer, 4, Enum.FillDirection.Horizontal)
+                actionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+                actionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+                for i, btnCfg in ipairs(extras.rightActions) do
+                    local btn = create("TextButton", {
+                        BackgroundTransparency = 1,
+                        Size = UDim2.fromOffset(24, 24),
+                        Text = "",
+                        AutoButtonColor = false,
+                    }, actionContainer)
+                    icon(btn, btnCfg.icon, 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
+                    corner(btn, 4)
+                    if btnCfg.callback then btn.Activated:Connect(btnCfg.callback) end
+                end
+            end
+        end
+        
         local ln = create("Frame", { Position = UDim2.fromOffset(8, 28), Size = UDim2.new(1, -16, 0, 1), BorderSizePixel = 0, BackgroundTransparency = 0.4 }, f)
         bind(ln, "BackgroundColor3", "Stroke")
         return f
     end
-    local lb, rb = makeBox(true, titles and titles.Left), makeBox(false, titles and titles.Right)
-    local close = create("TextButton", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -6, 0, 2), Size = UDim2.fromOffset(26, 26), BackgroundTransparency = 1, Text = "",
-        AutoButtonColor = false }, rb)
-    icon(close, "x", 16, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
-    close.MouseButton1Click:Connect(function() overlay.Visible = false end)
+    local lb, rb = makeBox(true, titles and titles.Left, headerExtras), makeBox(false, titles and titles.Right, headerExtras)
+    -- Default close button on right header (unless overridden by headerExtras)
+    if not (headerExtras and headerExtras.rightActions) then
+        local close = create("TextButton", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -6, 0, 2), Size = UDim2.fromOffset(26, 26), BackgroundTransparency = 1, Text = "",
+            AutoButtonColor = false }, rb)
+        icon(close, "x", 16, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
+        close.MouseButton1Click:Connect(function() overlay.Visible = false end)
+    end
     local lbody = create("Frame", { Position = UDim2.fromOffset(0, 30), Size = UDim2.new(1, 0, 1, -32), BackgroundTransparency = 1 }, lb)
     local rs = create("ScrollingFrame", { Position = UDim2.fromOffset(0, 32), Size = UDim2.new(1, 0, 1, -72), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2,
         CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollingDirection = Enum.ScrollingDirection.Y }, rb)

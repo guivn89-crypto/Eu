@@ -52,13 +52,13 @@ local function SetupCharacterPreview(previewContainer)
     local TRACER_COLOR = Color3.fromRGB(255, 255, 255)
     local ARROW_COLOR = Color3.fromRGB(255, 90, 90)
 
-    -- 1. Character Holder (centralizado no container)
+    -- 1. Character Holder (posicionado no terço superior para não sobrepor a grade 3x4)
     local holder = create("Frame", {
         Name = "PreviewHolder",
         BackgroundTransparency = 1,
         Size = UDim2.fromOffset(130, 200),
         AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.35),
     }, previewContainer)
 
     -- 2. R6 Chams Silhouette
@@ -540,77 +540,13 @@ local function buildEspPanel(kind)
         -- ============================================================
         --  LEFT SIDE: PRÉVIA
         -- ============================================================
-        -- Header bar with title + 3 action icons
-        local header = create("Frame", {
-            Name = "PreviewHeader",
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 30),
-            Position = UDim2.fromScale(0, 0),
-        }, L)
-        local headerLayout = listLayout(header, 0, Enum.FillDirection.Horizontal)
-        headerLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-        headerLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-        pad(header, 8, 8, 0, 0)
-
-        -- Title "PRÉVIA"
-        local titleLabel = label(header, "PRÉVIA", 14, "Text", true, {
-            Size = UDim2.fromOffset(60, 24),
-            TextXAlignment = Enum.TextXAlignment.Left,
-        })
-
-        -- Spacer to push action icons to right
-        local spacer = create("Frame", {
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, -120, 1, 0),
-        }, header)
-
-        -- Action icons container
-        local actionIcons = create("Frame", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(90, 24),
-        }, header)
-        local actionLayout = listLayout(actionIcons, 6, Enum.FillDirection.Horizontal)
-        actionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-        actionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-
-        -- Action 1: Mode/List toggle
-        local action1 = create("TextButton", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(24, 24),
-            Text = "",
-            AutoButtonColor = false,
-        }, actionIcons)
-        icon(action1, "layout-grid", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
-        corner(action1, 4)
-        -- TODO: Toggle preview mode (list/grid)
-
-        -- Action 2: Lock/Position toggle
-        local action2 = create("TextButton", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(24, 24),
-            Text = "",
-            AutoButtonColor = false,
-        }, actionIcons)
-        icon(action2, "lock", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
-        corner(action2, 4)
-        -- TODO: Lock preview position
-
-        -- Action 3: Reset/Star
-        local action3 = create("TextButton", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(24, 24),
-            Text = "",
-            AutoButtonColor = false,
-        }, actionIcons)
-        icon(action3, "star", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
-        corner(action3, 4)
-        -- TODO: Reset preview to defaults
+        -- Header is now created by Window:_getModal with headerExtras (3 action icons: layout-grid, lock, star)
 
         -- Central Preview Frame (dark background with soft glow)
         local previewFrame = create("Frame", {
             Name = "PreviewFrame",
             AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.fromScale(0.5, 0.55),
+            Position = UDim2.fromScale(0.5, 0.5),
             Size = UDim2.fromOffset(200, 210),
             BackgroundColor3 = Color3.fromRGB(15, 15, 20),
             BorderSizePixel = 0,
@@ -741,60 +677,15 @@ local function buildEspPanel(kind)
         -- ============================================================
         --  RIGHT SIDE: AJUSTES DO JOGADOR
         -- ============================================================
-        -- Header with "Ajustes gerais" + gear icon + close button
-        local rightHeader = create("Frame", {
-            Name = "SettingsHeader",
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 32),
-            Position = UDim2.fromScale(0, 0),
-        }, m.RightBox)
-        local rhLayout = listLayout(rightHeader, 0, Enum.FillDirection.Horizontal)
-        rhLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-        rhLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-        pad(rightHeader, 8, 8, 0, 0)
+        -- Header is now created by Window:_getModal with headerExtras (gear icon + X close)
 
-        local headerTitle = label(rightHeader, "Ajustes gerais", 14, "Text", true, {
-            Size = UDim2.fromOffset(120, 24),
-            TextXAlignment = Enum.TextXAlignment.Left,
-        })
-
-        -- Gear icon for general settings
-        local gearBtn = create("TextButton", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(24, 24),
-            Text = "",
-            AutoButtonColor = false,
-        }, rightHeader)
-        icon(gearBtn, "sliders-horizontal", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
-        corner(gearBtn, 4)
-        -- TODO: Open general settings foldout
-
-        -- Spacer
-        local rhSpacer = create("Frame", {
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, -180, 1, 0),
-        }, rightHeader)
-
-        -- Close button (X) - note: modal already has one, but we keep for consistency
-        local closeBtn = create("TextButton", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(24, 24),
-            Text = "",
-            AutoButtonColor = false,
-        }, rightHeader)
-        icon(closeBtn, "x", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
-        corner(closeBtn, 4)
-        closeBtn.Activated:Connect(function()
-            m.Overlay.Visible = false
-        end)
-
-        -- Scrolling content area
+        -- Scrolling content area (modal header is 28px + 4px separator = 32px, scroll starts at 32)
         local rightScroll = create("ScrollingFrame", {
             Name = "SettingsScroll",
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
-            Position = UDim2.fromOffset(0, 36),
-            Size = UDim2.new(1, 0, 1, -36 - 50), -- Leave space for footer
+            Position = UDim2.fromOffset(0, 32),
+            Size = UDim2.new(1, 0, 1, -32 - 50), -- Leave space for footer
             ScrollBarThickness = 2,
             CanvasSize = UDim2.new(),
             AutomaticCanvasSize = Enum.AutomaticSize.Y,

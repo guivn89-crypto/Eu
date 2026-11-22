@@ -1789,9 +1789,9 @@ function Protection.startESPEngine()
                 end
             end
         elseif kind == "NPCs" then
-            -- NPC ESP ONLY runs when NPC highlight toggle is explicitly true
+            -- NPC ESP ONLY runs when NPC master toggle AND highlight are explicitly true
             local S = Library.ESP and Library.ESP.NPCs
-            if not S or not S.highlight.on then return end
+            if not S or not S.enabled or not S.highlight.on then return end
             
             startNpcScan()
             for m, hum in pairs(npcs) do
@@ -1810,7 +1810,7 @@ function Protection.startESPEngine()
     local function processKind(kind, S, c, vp)
         local P = pool[kind]
         local list = {}
-        if S and not Library.Panic and anyOn(S) then gather(kind, list) end
+        if S and not Library.Panic and S.enabled and anyOn(S) then gather(kind, list) end
         local camPos = c.CFrame.Position
         local maxM = S and S.maxDist or 1000
         local vis = {}
@@ -1912,6 +1912,7 @@ function Protection.registerESPFeatures()
     -- Initialize default ESP config for all kinds at startup (so toggle works without opening settings first)
     -- ALL features start OFF by default - user enables them explicitly
     local defaultESPConfig = {
+        enabled = false,  -- Master toggle for this ESP kind
         highlight = { on = false, color = Color3.fromRGB(245, 160, 30), alpha = 0.6, outline = 2 },
         box = { on = false, color = Color3.fromRGB(215, 215, 215), thick = 1, style = "Completa", corner = 14, alpha = 0.5 },
         name = { on = false, color = Color3.fromRGB(235, 235, 235) },
@@ -1957,6 +1958,9 @@ function Protection.registerESPFeatures()
         local S = Library.ESP and Library.ESP[kind]
         if not S then return end
         
+        -- Set master enabled flag
+        S.enabled = enabled
+        
         -- Disable ALL features when main toggle is off
         if not enabled then
             S.highlight.on = false
@@ -1974,6 +1978,7 @@ function Protection.registerESPFeatures()
             -- Immediately clean up all drawings for this kind
             cleanupKindDrawings(kind)
         end
+        -- When enabled = true, do NOT auto-enable sub-features (user controls them individually)
         
         secureLog(1, "[BBC][ESP] Toggle " .. kind .. ": " .. tostring(enabled))
         if enabled then Protection.startESPEngine() end

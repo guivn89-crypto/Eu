@@ -2497,9 +2497,9 @@ function Protection.startESPEngine()
                 end
             end
         elseif kind == "NPCs" then
-            -- NPC ESP ONLY runs when NPC highlight toggle is explicitly true
+            -- NPC ESP ONLY runs when NPC master toggle AND highlight are explicitly true
             local S = Library.ESP and Library.ESP.NPCs
-            if not S or not S.highlight.on then return end
+            if not S or not S.enabled or not S.highlight.on then return end
             
             startNpcScan()
             for m, hum in pairs(npcs) do
@@ -2518,7 +2518,7 @@ function Protection.startESPEngine()
     local function processKind(kind, S, c, vp)
         local P = pool[kind]
         local list = {}
-        if S and not Library.Panic and anyOn(S) then gather(kind, list) end
+        if S and not Library.Panic and S.enabled and anyOn(S) then gather(kind, list) end
         local camPos = c.CFrame.Position
         local maxM = S and S.maxDist or 1000
         local vis = {}
@@ -2620,6 +2620,7 @@ function Protection.registerESPFeatures()
     -- Initialize default ESP config for all kinds at startup (so toggle works without opening settings first)
     -- ALL features start OFF by default - user enables them explicitly
     local defaultESPConfig = {
+        enabled = false,  -- Master toggle for this ESP kind
         highlight = { on = false, color = Color3.fromRGB(245, 160, 30), alpha = 0.6, outline = 2 },
         box = { on = false, color = Color3.fromRGB(215, 215, 215), thick = 1, style = "Completa", corner = 14, alpha = 0.5 },
         name = { on = false, color = Color3.fromRGB(235, 235, 235) },
@@ -2665,6 +2666,9 @@ function Protection.registerESPFeatures()
         local S = Library.ESP and Library.ESP[kind]
         if not S then return end
         
+        -- Set master enabled flag
+        S.enabled = enabled
+        
         -- Disable ALL features when main toggle is off
         if not enabled then
             S.highlight.on = false
@@ -2682,6 +2686,7 @@ function Protection.registerESPFeatures()
             -- Immediately clean up all drawings for this kind
             cleanupKindDrawings(kind)
         end
+        -- When enabled = true, do NOT auto-enable sub-features (user controls them individually)
         
         secureLog(1, "[BBC][ESP] Toggle " .. kind .. ": " .. tostring(enabled))
         if enabled then Protection.startESPEngine() end
@@ -3303,7 +3308,7 @@ function Container:Toggle(opts)
         local key = (self._path or "") .. "/" .. tostring(opts.Name)
         local hooked = false
         local modalBtn = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
-            local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal)
+            local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras)
             if not hooked then
                 hooked = true
                 m.Overlay:GetPropertyChangedSignal("Visible"):Connect(function()
@@ -3321,7 +3326,7 @@ function Container:Toggle(opts)
         row.MouseButton1Click:Connect(function()
             if row:GetAttribute("TipHeld") then return end
             if locked then return end
-            local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal)
+            local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras)
             if not hooked then
                 hooked = true
                 m.Overlay:GetPropertyChangedSignal("Visible"):Connect(function()
@@ -3333,7 +3338,7 @@ function Container:Toggle(opts)
             m.Overlay.Visible = not m.Overlay.Visible
         end)
         if opts.Prebuild then
-            task.defer(function() pcall(function() self.Window:_getModal(key, opts.ModalTitles, opts.Modal) end) end)
+            task.defer(function() pcall(function() self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras) end) end)
         end
     end
 
@@ -3829,7 +3834,7 @@ function Controls.T(tab, name, default, tip)
     local o = { Name = name, Default = default or false, Tooltip = tip or TIPS[name],
         Callback = function(v) FS[name] = v; local f = Features[name]; if f then f(v) end end }
     if GEARS[name] then o.Settings = BBC.buildSettings(name); o.SettingsIcon = SETTINGS_ICON[name] end
-    if MODALS[name] then o.Modal = MODALS[name].build; o.ModalTitles = MODALS[name].titles; o.Settings = nil; o.Prebuild = true end
+    if MODALS[name] then o.Modal = MODALS[name].build; o.ModalTitles = MODALS[name].titles; o.ModalHeaderExtras = MODALS[name].headerExtras; o.Settings = nil; o.Prebuild = true end
     if PREMIUM[name] then o.Premium = true end
     if name == "Buscar chefes" then o.Warning = true end
     return tab:Toggle(o)
@@ -4008,26 +4013,81 @@ function Tab:Groupbox(opts)
     return setmetatable({ List = body, _order = 0, Window = self.Window, _path = self._path .. "/" .. tostring(opts.Name), Frame = box, Checkbox = cbObj }, Container)
 end
 
-function Window:_getModal(key, titles, build)
+function Window:_getModal(key, titles, build, headerExtras)
     self._modals = self._modals or {}
     local m = self._modals[key]
     if m then return m end
     local overlay = create("Frame", { Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, Visible = false, ZIndex = 20 }, self._content)
     bind(overlay, "BackgroundColor3", "Background")
-    local function makeBox(left, title)
+    local function makeBox(left, title, extras)
         local f = create("Frame", { Position = UDim2.new(left and 0 or 0.5, left and 0 or 4, 0, 0), Size = UDim2.new(0.5, -4, 1, 0), BorderSizePixel = 0 }, overlay)
         bind(f, "BackgroundColor3", "Surface"); corner(f, 4)
         local st = create("UIStroke", { Thickness = 1, Transparency = 0.15 }, f); bind(st, "Color", "Accent")
-        label(f, title or "", 12, "Muted", true, { Position = UDim2.fromOffset(12, 0), Size = UDim2.new(1, -50, 0, 28), TextYAlignment = Enum.TextYAlignment.Center })
+        
+        -- Header bar with title + optional extras (action buttons)
+        local header = create("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 28),
+            Position = UDim2.fromScale(0, 0),
+        }, f)
+        local headerLayout = listLayout(header, 6, Enum.FillDirection.Horizontal)
+        headerLayout.HorizontalAlignment = left and Enum.HorizontalAlignment.Left or Enum.HorizontalAlignment.Left
+        headerLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        pad(header, 8, 8, 0, 0)
+        
+        label(header, title or "", 12, "Muted", true, { Size = UDim2.fromOffset(left and 80 or 100, 22), TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Center })
+        
+        -- Add extra buttons if provided
+        if extras then
+            if left and extras.leftActions then
+                local spacer = create("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, -140, 1, 0) }, header)
+                local actionContainer = create("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(#extras.leftActions * 30, 22) }, header)
+                local actionLayout = listLayout(actionContainer, 4, Enum.FillDirection.Horizontal)
+                actionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+                actionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+                for i, btnCfg in ipairs(extras.leftActions) do
+                    local btn = create("TextButton", {
+                        BackgroundTransparency = 1,
+                        Size = UDim2.fromOffset(24, 24),
+                        Text = "",
+                        AutoButtonColor = false,
+                    }, actionContainer)
+                    icon(btn, btnCfg.icon, 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
+                    corner(btn, 4)
+                    if btnCfg.callback then btn.Activated:Connect(btnCfg.callback) end
+                end
+            elseif not left and extras.rightActions then
+                local spacer = create("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, -140, 1, 0) }, header)
+                local actionContainer = create("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(#extras.rightActions * 30, 22) }, header)
+                local actionLayout = listLayout(actionContainer, 4, Enum.FillDirection.Horizontal)
+                actionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+                actionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+                for i, btnCfg in ipairs(extras.rightActions) do
+                    local btn = create("TextButton", {
+                        BackgroundTransparency = 1,
+                        Size = UDim2.fromOffset(24, 24),
+                        Text = "",
+                        AutoButtonColor = false,
+                    }, actionContainer)
+                    icon(btn, btnCfg.icon, 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
+                    corner(btn, 4)
+                    if btnCfg.callback then btn.Activated:Connect(btnCfg.callback) end
+                end
+            end
+        end
+        
         local ln = create("Frame", { Position = UDim2.fromOffset(8, 28), Size = UDim2.new(1, -16, 0, 1), BorderSizePixel = 0, BackgroundTransparency = 0.4 }, f)
         bind(ln, "BackgroundColor3", "Stroke")
         return f
     end
-    local lb, rb = makeBox(true, titles and titles.Left), makeBox(false, titles and titles.Right)
-    local close = create("TextButton", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -6, 0, 2), Size = UDim2.fromOffset(26, 26), BackgroundTransparency = 1, Text = "",
-        AutoButtonColor = false }, rb)
-    icon(close, "x", 16, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
-    close.MouseButton1Click:Connect(function() overlay.Visible = false end)
+    local lb, rb = makeBox(true, titles and titles.Left, headerExtras), makeBox(false, titles and titles.Right, headerExtras)
+    -- Default close button on right header (unless overridden by headerExtras)
+    if not (headerExtras and headerExtras.rightActions) then
+        local close = create("TextButton", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -6, 0, 2), Size = UDim2.fromOffset(26, 26), BackgroundTransparency = 1, Text = "",
+            AutoButtonColor = false }, rb)
+        icon(close, "x", 16, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
+        close.MouseButton1Click:Connect(function() overlay.Visible = false end)
+    end
     local lbody = create("Frame", { Position = UDim2.fromOffset(0, 30), Size = UDim2.new(1, 0, 1, -32), BackgroundTransparency = 1 }, lb)
     local rs = create("ScrollingFrame", { Position = UDim2.fromOffset(0, 32), Size = UDim2.new(1, 0, 1, -72), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2,
         CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollingDirection = Enum.ScrollingDirection.Y }, rb)
@@ -5059,13 +5119,13 @@ local function SetupCharacterPreview(previewContainer)
     local TRACER_COLOR = Color3.fromRGB(255, 255, 255)
     local ARROW_COLOR = Color3.fromRGB(255, 90, 90)
 
-    -- 1. Character Holder (centralizado no container)
+    -- 1. Character Holder (posicionado no terço superior para não sobrepor a grade 3x4)
     local holder = create("Frame", {
         Name = "PreviewHolder",
         BackgroundTransparency = 1,
         Size = UDim2.fromOffset(130, 200),
         AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.35),
     }, previewContainer)
 
     -- 2. R6 Chams Silhouette
@@ -5547,77 +5607,13 @@ local function buildEspPanel(kind)
         -- ============================================================
         --  LEFT SIDE: PRÉVIA
         -- ============================================================
-        -- Header bar with title + 3 action icons
-        local header = create("Frame", {
-            Name = "PreviewHeader",
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 30),
-            Position = UDim2.fromScale(0, 0),
-        }, L)
-        local headerLayout = listLayout(header, 0, Enum.FillDirection.Horizontal)
-        headerLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-        headerLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-        pad(header, 8, 8, 0, 0)
-
-        -- Title "PRÉVIA"
-        local titleLabel = label(header, "PRÉVIA", 14, "Text", true, {
-            Size = UDim2.fromOffset(60, 24),
-            TextXAlignment = Enum.TextXAlignment.Left,
-        })
-
-        -- Spacer to push action icons to right
-        local spacer = create("Frame", {
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, -120, 1, 0),
-        }, header)
-
-        -- Action icons container
-        local actionIcons = create("Frame", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(90, 24),
-        }, header)
-        local actionLayout = listLayout(actionIcons, 6, Enum.FillDirection.Horizontal)
-        actionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-        actionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-
-        -- Action 1: Mode/List toggle
-        local action1 = create("TextButton", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(24, 24),
-            Text = "",
-            AutoButtonColor = false,
-        }, actionIcons)
-        icon(action1, "layout-grid", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
-        corner(action1, 4)
-        -- TODO: Toggle preview mode (list/grid)
-
-        -- Action 2: Lock/Position toggle
-        local action2 = create("TextButton", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(24, 24),
-            Text = "",
-            AutoButtonColor = false,
-        }, actionIcons)
-        icon(action2, "lock", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
-        corner(action2, 4)
-        -- TODO: Lock preview position
-
-        -- Action 3: Reset/Star
-        local action3 = create("TextButton", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(24, 24),
-            Text = "",
-            AutoButtonColor = false,
-        }, actionIcons)
-        icon(action3, "star", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
-        corner(action3, 4)
-        -- TODO: Reset preview to defaults
+        -- Header is now created by Window:_getModal with headerExtras (3 action icons: layout-grid, lock, star)
 
         -- Central Preview Frame (dark background with soft glow)
         local previewFrame = create("Frame", {
             Name = "PreviewFrame",
             AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.fromScale(0.5, 0.55),
+            Position = UDim2.fromScale(0.5, 0.5),
             Size = UDim2.fromOffset(200, 210),
             BackgroundColor3 = Color3.fromRGB(15, 15, 20),
             BorderSizePixel = 0,
@@ -5748,60 +5744,15 @@ local function buildEspPanel(kind)
         -- ============================================================
         --  RIGHT SIDE: AJUSTES DO JOGADOR
         -- ============================================================
-        -- Header with "Ajustes gerais" + gear icon + close button
-        local rightHeader = create("Frame", {
-            Name = "SettingsHeader",
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 32),
-            Position = UDim2.fromScale(0, 0),
-        }, m.RightBox)
-        local rhLayout = listLayout(rightHeader, 0, Enum.FillDirection.Horizontal)
-        rhLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-        rhLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-        pad(rightHeader, 8, 8, 0, 0)
+        -- Header is now created by Window:_getModal with headerExtras (gear icon + X close)
 
-        local headerTitle = label(rightHeader, "Ajustes gerais", 14, "Text", true, {
-            Size = UDim2.fromOffset(120, 24),
-            TextXAlignment = Enum.TextXAlignment.Left,
-        })
-
-        -- Gear icon for general settings
-        local gearBtn = create("TextButton", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(24, 24),
-            Text = "",
-            AutoButtonColor = false,
-        }, rightHeader)
-        icon(gearBtn, "sliders-horizontal", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
-        corner(gearBtn, 4)
-        -- TODO: Open general settings foldout
-
-        -- Spacer
-        local rhSpacer = create("Frame", {
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, -180, 1, 0),
-        }, rightHeader)
-
-        -- Close button (X) - note: modal already has one, but we keep for consistency
-        local closeBtn = create("TextButton", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(24, 24),
-            Text = "",
-            AutoButtonColor = false,
-        }, rightHeader)
-        icon(closeBtn, "x", 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
-        corner(closeBtn, 4)
-        closeBtn.Activated:Connect(function()
-            m.Overlay.Visible = false
-        end)
-
-        -- Scrolling content area
+        -- Scrolling content area (modal header is 28px + 4px separator = 32px, scroll starts at 32)
         local rightScroll = create("ScrollingFrame", {
             Name = "SettingsScroll",
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
-            Position = UDim2.fromOffset(0, 36),
-            Size = UDim2.new(1, 0, 1, -36 - 50), -- Leave space for footer
+            Position = UDim2.fromOffset(0, 32),
+            Size = UDim2.new(1, 0, 1, -32 - 50), -- Leave space for footer
             ScrollBarThickness = 2,
             CanvasSize = UDim2.new(),
             AutomaticCanvasSize = Enum.AutomaticSize.Y,
@@ -7388,8 +7339,8 @@ do
 end
 
 -- Register ESP preview modals BEFORE building visuals tab (so Controls.T can find them)
-BBC.MODALS["Jogador"] = { build = BBC.Features.buildEspPanel("Jogador"), titles = { Left = "PRÉVIA", Right = "Ajustes gerais" } }
-BBC.MODALS["NPCs"] = { build = BBC.Features.buildEspPanel("NPCs"), titles = { Left = "PRÉVIA", Right = "Ajustes do NPC" } }
+BBC.MODALS["Jogador"] = { build = BBC.Features.buildEspPanel("Jogador"), titles = { Left = "PRÉVIA", Right = "Ajustes gerais" }, headerExtras = { leftActions = { { icon = "layout-grid", callback = function() end }, { icon = "lock", callback = function() end }, { icon = "star", callback = function() end } }, rightActions = { { icon = "sliders-horizontal", callback = function() end }, { icon = "x", callback = function(m) m.Overlay.Visible = false end } } } }
+BBC.MODALS["NPCs"] = { build = BBC.Features.buildEspPanel("NPCs"), titles = { Left = "PRÉVIA", Right = "Ajustes do NPC" }, headerExtras = { leftActions = { { icon = "layout-grid", callback = function() end }, { icon = "lock", callback = function() end }, { icon = "star", callback = function() end } }, rightActions = { { icon = "sliders-horizontal", callback = function() end }, { icon = "x", callback = function(m) m.Overlay.Visible = false end } } } }
 
 -- ---------- Features ----------
 BBC.Features.buildVisuals(Window)
