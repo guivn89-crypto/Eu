@@ -90,7 +90,8 @@ function Utils.label(parent, text, size, key, bold, props)
 end
 
 -- ---------- Ícones (Lucide) ----------
-local LUCIDE_URL = "https://raw.githubusercontent.com/Footagesus/Icons/refs/heads/main/lucide/dist/Icons.lua"
+local LUCIDE_URL = "https://raw.githubusercontent.com/lucide-icons/lucide/main/lucide/lucide.lua"
+local LUCIDE_FALLBACK_URL = "https://raw.githubusercontent.com/Footagesus/Icons/main/lucide/dist/Icons.lua"
 local lucide = nil
 local iconsGaveUp = false
 local allIcons = {}
@@ -98,6 +99,14 @@ local GLYPHS = {
     ["eye"] = "◉", ["user"] = "☺", ["crosshair"] = "⌖", ["globe"] = "◍", ["layout-grid"] = "▦", ["package-search"] = "▣",
     ["server"] = "▤", ["palette"] = "✎", ["scroll-text"] = "☰", ["shopping-cart"] = "▲", ["settings"] = "⚙", ["search"] = "⌕",
     ["flame"] = "♨", ["save"] = "▣", ["box"] = "◆", ["sliders-horizontal"] = "≡", ["message-circle"] = "✉", ["lock"] = "⚿", ["snowflake"] = "❄", ["x"] = "✕",
+    ["save"] = "▣", ["box"] = "◆", ["sliders-horizontal"] = "≡", ["align-left"] = "≡", ["pin"] = "⚿", ["x"] = "✕", ["navigation-2"] = "⌖",
+    ["scan-eye"] = "◉", ["layout-dashboard"] = "▦", ["map-pin"] = "◍", ["package"] = "▣", ["move"] = "⌖", ["camera"] = "◍",
+    ["focus"] = "◉", ["hand"] = "☺", ["activity"] = "♨", ["puzzle"] = "▦", ["globe"] = "◍", ["lightbulb"] = "☺",
+    ["volume-2"] = "♨", ["radar"] = "◉", ["arrow-down-up"] = "⌖", ["backpack"] = "▣", ["shield"] = "⚿", ["sparkles"] = "✕",
+    ["target"] = "⌖", ["swords"] = "⚔", ["bomb"] = "●", ["filter"] = "▦", ["package-search"] = "▣", ["server"] = "▤",
+    ["palette"] = "✎", ["scroll-text"] = "☰", ["shopping-cart"] = "▲", ["settings"] = "⚙", ["search"] = "⌕",
+    ["flame"] = "♨", ["save"] = "▣", ["box"] = "◆", ["sliders-horizontal"] = "≡", ["message-circle"] = "✉", ["lock"] = "⚿",
+    ["snowflake"] = "❄", ["x"] = "✕", ["align-left"] = "≡", ["pin"] = "⚿", ["navigation-2"] = "⌖",
 }
 local function resolveIcon(name)
     if not lucide then return nil end
@@ -136,6 +145,12 @@ end
 task.spawn(function()
     local CACHE = "BBC_HUB/cache_lucide.lua"
     local function compile(src) local f = loadstring(src); return f and f() end
+    local function tryLoad(url)
+        local src = game:HttpGet(url)
+        local lib = compile(src)
+        if type(lib) == "table" then return lib end
+        return nil
+    end
     local ok, result = pcall(function()
         if type(isfile) == "function" and type(readfile) == "function" then
             local okc, cached = pcall(function() if isfile(CACHE) then return readfile(CACHE) end end)
@@ -144,15 +159,29 @@ task.spawn(function()
                 if okp and type(lib) == "table" then return lib end
             end
         end
-        local src = game:HttpGet(LUCIDE_URL)
-        local lib = compile(src)
-        if type(writefile) == "function" then
-            pcall(function()
-                if type(isfolder) == "function" and type(makefolder) == "function" and not isfolder("BBC_HUB") then makefolder("BBC_HUB") end
-                writefile(CACHE, src)
-            end)
+        -- Try primary URL
+        local lib = tryLoad(LUCIDE_URL)
+        if lib then
+            if type(writefile) == "function" then
+                pcall(function()
+                    if type(isfolder) == "function" and type(makefolder) == "function" and not isfolder("BBC_HUB") then makefolder("BBC_HUB") end
+                    writefile(CACHE, game:HttpGet(LUCIDE_URL))
+                end)
+            end
+            return lib
         end
-        return lib
+        -- Try fallback URL
+        lib = tryLoad(LUCIDE_FALLBACK_URL)
+        if lib then
+            if type(writefile) == "function" then
+                pcall(function()
+                    if type(isfolder) == "function" and type(makefolder) == "function" and not isfolder("BBC_HUB") then makefolder("BBC_HUB") end
+                    writefile(CACHE, game:HttpGet(LUCIDE_FALLBACK_URL))
+                end)
+            end
+            return lib
+        end
+        return nil
     end)
     if ok and type(result) == "table" then
         lucide = result

@@ -952,6 +952,32 @@ function Library:Window(opts)
     fit()
     self:_connect(gui:GetPropertyChangedSignal("AbsoluteSize"), fit)
     if intro then self:_startIntro(opts, W, H) end
+    
+    -- Safety timeout: force-show main frame if intro gets stuck (max 15s)
+    task.spawn(function()
+        local introTimeout = 15
+        local startTime = os.clock()
+        while self._introActive and os.clock() - startTime < introTimeout do
+            task.wait(0.2)
+        end
+        if self._introActive then
+            warn("[BBC] Intro timeout - forçando exibição do menu")
+            self._introActive = false
+            self._introProgress = nil
+            main.Visible = true
+            if self._scale then
+                self._scale.Scale = self._fitScale or 1
+            end
+            self:_updateIsland()
+            if self._toggleBtn then self._toggleBtn.Visible = true end
+            -- Load autoload config
+            local auto = self:GetAutoload()
+            if auto then self:LoadConfig(auto, true) end
+            self._ready = true
+            self:StartAutoSave()
+        end
+    end)
+
     local t0 = os.clock()
     while not BBC.lucide and not BBC.iconsGaveUp and os.clock() - t0 < 25 do task.wait(0.1) end
     if not BBC.lucide then
