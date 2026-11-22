@@ -514,7 +514,6 @@ BBC.TIPS = {
     ["Limite de verificações"] = "Quantas checagens por quadro.", ["Fixar"] = "Impede que o painel seja arrastado.",
 }
 BBC.MODALS = {}
--- MODALS["Jogador"] e ["NPCs"] são definidos em features/visuals.lua (buildEspPanel)
 
 -- ---------- Janela Principal ----------
 local Window = Library:Window({
@@ -544,6 +543,11 @@ end
 
 -- ---------- Features ----------
 BBC.Features.buildVisuals(Window)
+
+-- Register ESP preview modals (after visuals builds the buildEspPanel)
+BBC.MODALS["Jogador"] = { build = BBC.Features.buildEspPanel("Jogador"), titles = { Left = "PRÉ-VISUALIZAÇÃO", Right = "CONFIGURAÇÕES DO JOGADOR" } }
+BBC.MODALS["NPCs"] = { build = BBC.Features.buildEspPanel("NPCs"), titles = { Left = "PRÉ-VISUALIZAÇÃO", Right = "CONFIGURAÇÕES DO NPC" } }
+
 BBC.Features.buildPlayer(Window)
 BBC.Features.buildCombat(Window)
 BBC.Features.buildWorld(Window)
@@ -774,13 +778,33 @@ end
 -- ---------- Aba CONFIGURAÇÕES ----------
 local cfg = Window:Tab({ Name = "CONFIGURAÇÕES", Icon = "settings", Hidden = true, IsSettings = true })
 
--- Segurança: modo pânico
+-- Segurança: modo pânico + status de proteção
 do
+    local Protection = BBC.Protection
     local P = cfg:Groupbox({ Name = "SEGURANÇA", Icon = "shield", Side = "Left" })
     Library._panicToggle = P:Toggle({ Name = "Modo pânico", Default = false, NoPersist = true,
         Tooltip = "Esconde menu, ESP, radar e botões fixos de uma vez. Para voltar, toque 3 vezes no topo da tela (ou use a tecla de pânico).",
         Callback = function(v) Window:SetPanic(v) end })
     P:Keybind({ Name = "Tecla de pânico", Default = "End", Callback = function() Window:SetPanic(not Library.Panic) end })
+
+    -- Protection Status Display
+    local protInfo = P:Label({ Text = "Executor: Detectando..." })
+    local protLevel = P:Label({ Text = "Nível: --" })
+    local protCaps = P:Label({ Text = "APIs: --" })
+
+    task.spawn(function()
+        task.wait(1) -- wait for Protection.init()
+        local prot = BBC.Protection
+        if prot then
+            protInfo.Set("Executor: " .. (prot.Executor or "Unknown"))
+            local level, desc = prot.getProtectionLevel()
+            protLevel.Set("Nível: " .. level .. " - " .. desc)
+            local caps = prot.Capabilities or {}
+            local count = 0
+            for _, v in pairs(caps) do if v then count = count + 1 end end
+            protCaps.Set("APIs disponíveis: " .. count .. "/" .. (function() local c=0 for _ in pairs(caps) do c=c+1 end return c end)())
+        end
+    end)
 end
 
 -- Geral

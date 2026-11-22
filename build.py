@@ -24,6 +24,7 @@ OUTPUT = DIST / "menu_bundle.lua"
 MODULES = [
     ("utils/security.lua", "utils.security"),
     ("utils/drawing.lua", "utils.drawing"),
+    ("utils/protection.lua", "utils.protection"),
     ("ui/theme.lua", "ui.theme"),
     ("ui/components.lua", "ui.components"),
     ("ui/window.lua", "ui.window"),
