@@ -20,3 +20,5 @@ Thumbs.db
 
 # Logs
 *.log
+# OpenCode skills backup (arquivadas - nao subir pro GitHub)
+.opencode/skills-backup/
