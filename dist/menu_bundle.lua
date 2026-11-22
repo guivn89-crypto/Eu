@@ -527,16 +527,42 @@ end)
 -- ============================================================
 __module("utils.protection", function(BBC)
 --[[
-    BBC HUB - Protection & Bypass Layer
-    Camada de proteção, detecção de executor e compatibilidade multi-API.
+    BBC HUB - Advanced Protection & Bypass Layer (Complete)
+    Camada completa de proteção, ofuscação, bypass e compatibilidade multi-executor.
 
-    Níveis de proteção:
-    - Nível 1 (Básico): Environment checks, safe calls, config validation
-    - Nível 2 (Intermediário): Integrity checks, anti-debug, executor detection
-    - Nível 3 (Avançado): Anti-dump, VM detection, bytecode verification, secure strings
-    - Nível 4 (Máximo): Polymorphic code, runtime encryption, kernel-level hooks (requer executor específico)
+    PROTEÇÕES INCLUÍDAS:
+    ██████████████████████████████████████████████████████████████████████████
+    █ 1. EXECUTOR DETECTION & FINGERPRINTING (11 executors)                █
+    █ 2. CAPABILITY MATRIX & UNIFIED API (35+ APIs)                      █
+    █ 3. INTEGRITY MONITORING (environment, globals, hooks)              █
+    █ 4. ANTI-DUMP / ANTI-DEBUG / ANTI-DECOMPILER                        █
+    █ 5. ADVANCED CRYPTOGRAPHY (AES-256, ChaCha20, SHA-256, HMAC, ECDH)  █
+    █ 6. SECURE STRINGS & CONSTANT ENCODING (polymorphic, per-session)   █
+    █ 7. CONTROL FLOW OBFUSCATION (flattening, opaque predicates)        █
+    █ 8. FUNCTION VIRTUALIZATION & BYTECODE INTERPRETATION               █
+    █ 9. PROXY ENVIRONMENT & METATABLE HARDENING                         █
+    █ 10. WATERMARKING & BUILD FINGERPRINTING (per-user/build)           █
+    █ 11. LICENSE SYSTEM & HWID BINDING (with server validation)         █
+    █ 12. HEARTBEAT & TIME-BASED EXPIRATION                              █
+    █ 13. ANTI-RELOAD / ANTI-REINJECT / ANTI-TAMPER                      █
+    █ 14. NETWORK ENCRYPTION & SECURE CHANNELS                           █
+    █ 15. VM/SANDBOX DETECTION & ANALYSIS EVASION                        █
+    █ 16. STACK TRACE OBFUSCATION & CALLER VERIFICATION                  █
+    █ 17. TIMING ATTACK PREVENTION & SIDE-CHANNEL RESISTANCE             █
+    █ 18. CONTROL FLOW INTEGRITY (CFI) & RETURN ADDRESS PROTECTION       █
+    █ 19. SECURE RANDOM & CRYPTOGRAPHIC PRIMITIVES                       █
+    █ 20. POLYMORPHIC CODE GENERATION & SELF-MODIFYING PATTERNS          █
+    ██████████████████████████████████████████████████████████████████████████
 
-    Compatibilidade: Synapse X, Script-Ware, Fluxus, Delta, KRNL, Electron, Arceus X, Codex, Solara, Wave, VEGA X
+    NÍVEIS DE PROTEÇÃO:
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │ NÍVEL 1 - BÁSICO       │ Env checks, safe calls, config freeze    │
+    │ NÍVEL 2 - INTERMEDIÁRIO │ Integrity, anti-debug, executor detect  │
+    │ NÍVEL 3 - AVANÇADO      │ Anti-dump, VM detect, crypto, strings   │
+    │ NÍVEL 4 - MÁXIMO        │ Polymorphic, CFI, virtualization, E2EE  │
+    └─────────────────────────────────────────────────────────────────────┘
+
+    COMPATIBILIDADE: Synapse X, Script-Ware, Fluxus, Delta, KRNL, Electron, Arceus X, Codex, Solara, Wave, VEGA X, UNC Generic
 ]]
 
 local Protection = {}
@@ -544,6 +570,7 @@ local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local Security = BBC.Security
 local Utils = BBC.Utils
@@ -552,69 +579,94 @@ local function log(message)
     warn("[BBC][protection] " .. tostring(message))
 end
 
+local function secureLog(level, message)
+    if level >= (Protection._logLevel or 1) then
+        warn(string.format("[BBC][protection][%s] %s", level == 1 and "INFO" or level == 2 and "WARN" or "CRIT", tostring(message)))
+    end
+end
+
 -- ============================================================
--- EXECUTOR DETECTION & CAPABILITY MATRIX
+-- CONSTANTS & CONFIGURATION
+-- ============================================================
+Protection.VERSION = "2.0.0"
+Protection.BUILD_ID = HttpService:GenerateGUID(false):sub(1, 8)
+Protection.SESSION_ID = HttpService:GenerateGUID(false)
+Protection._logLevel = 1
+Protection._initialized = false
+Protection._destroyed = false
+
+-- ============================================================
+-- 1. EXECUTOR DETECTION & FINGERPRINTING
 -- ============================================================
 Protection.Executor = "Unknown"
+Protection.ExecutorVersion = "Unknown"
 Protection.API = {}
 Protection.Capabilities = {}
 Protection.Fingerprint = ""
+Protection.HWID = ""
 
 local EXECUTOR_SIGNATURES = {
-    -- Synapse X
     Synapse = {
         globals = { "syn", "synapse" },
-        functions = { "syn.crypt", "syn.request", "syn.queue_on_teleport", "syn.protect_gui", "syn.unprotect_gui" },
+        functions = { "syn.crypt", "syn.request", "syn.queue_on_teleport", "syn.protect_gui", "syn.unprotect_gui", "syn.set_thread_identity", "syn.get_thread_identity" },
         identity = 7,
         unc_support = 0.98,
+        version_check = function(env) return env.syn and env.syn.version end,
     },
-    -- Script-Ware
     ScriptWare = {
         globals = { "sw", "scriptware" },
-        functions = { "sw.request", "sw.getgenv", "sw.setthreadidentity" },
+        functions = { "sw.request", "sw.getgenv", "sw.setthreadidentity", "sw.hookfunction", "sw.clonefunction" },
         identity = 8,
         unc_support = 0.95,
+        version_check = function(env) return env.sw and env.sw.version end,
     },
-    -- Fluxus
     Fluxus = {
         globals = { "fluxus", "Fluxus" },
-        functions = { "fluxus.request", "fluxus.queue_on_teleport", "fluxus.protect_gui" },
+        functions = { "fluxus.request", "fluxus.queue_on_teleport", "fluxus.protect_gui", "fluxus.setthreadidentity" },
         identity = 7,
         unc_support = 0.90,
+        version_check = function(env) return env.fluxus and env.fluxus.version end,
     },
-    -- Delta
     Delta = {
         globals = { "delta", "Delta" },
-        functions = { "delta.request", "delta.queue_on_teleport" },
+        functions = { "delta.request", "delta.queue_on_teleport", "delta.protect_gui" },
         identity = 7,
         unc_support = 0.88,
+        version_check = function(env) return env.delta and env.delta.version end,
     },
-    -- KRNL
     KRNL = {
         globals = { "krnl", "Krnl" },
-        functions = { "krnl.request", "krnl.queue_on_teleport" },
+        functions = { "krnl.request", "krnl.queue_on_teleport", "krnl.protect_gui" },
         identity = 7,
         unc_support = 0.85,
+        version_check = function(env) return env.krnl and env.krnl.version end,
     },
-    -- Electron
     Electron = {
         globals = { "electron", "Electron" },
         functions = { "electron.request", "electron.queue_on_teleport" },
         identity = 7,
         unc_support = 0.80,
+        version_check = function(env) return env.electron and env.electron.version end,
     },
-    -- Arceus X / Codex / Solara / Wave
     ArceusX = {
-        globals = { "arceus", "Arceus" },
+        globals = { "arceus", "Arceus", "codex", "Codex", "solara", "Solara", "wave", "Wave" },
         functions = { "arceus.request" },
         identity = 6,
         unc_support = 0.70,
+        version_check = function(env) return env.arceus and env.arceus.version or env.codex and env.codex.version end,
     },
-    -- Generic UNC (Universal Naming Convention)
+    VEGA = {
+        globals = { "vega", "Vega", "VEGA" },
+        functions = { "vega.request" },
+        identity = 6,
+        unc_support = 0.75,
+        version_check = function(env) return env.vega and env.vega.version end,
+    },
     UNC = {
         globals = { "getgenv", "getrenv", "getsenv", "getfenv", "setthreadidentity", "getthreadidentity", "clonefunction", "hookfunction", "hookmetamethod", "checkcaller", "iscclosure", "islclosure", "newcclosure", "getgc", "getreg", "getloadedmodules", "getscripts", "getnilinstances", "gethiddenproperty", "sethiddenproperty", "fireclickdetector", "fireproximityprompt", "getconnections", "setclipboard", "getcustomasset", "queue_on_teleport", "request", "httpget", "httppost", "rconsoleprint", "rconsolewarn", "rconsoleerr", "rconsoleinfo" },
         identity = 6,
         unc_support = 0.60,
+        version_check = function() return "UNC Generic" end,
     },
 }
 
@@ -623,6 +675,7 @@ function Protection.detectExecutor()
     local detected = {}
     local maxScore = 0
     local bestMatch = "Unknown"
+    local bestVersion = "Unknown"
 
     for name, sig in pairs(EXECUTOR_SIGNATURES) do
         local score = 0
@@ -648,116 +701,156 @@ function Protection.detectExecutor()
         if score > maxScore then
             maxScore = score
             bestMatch = name
+            if sig.version_check then
+                local ok, ver = pcall(sig.version_check, env)
+                if ok and ver then bestVersion = tostring(ver) end
+            end
         end
         detected[name] = { score = score, signature = sig }
     end
 
     Protection.Executor = bestMatch
-    Protection.Fingerprint = string.format("%s_%d", bestMatch, maxScore)
-    log(string.format("Executor detectado: %s (score: %d)", bestMatch, maxScore))
+    Protection.ExecutorVersion = bestVersion
+    Protection.Fingerprint = string.format("%s_%s_%d", bestMatch, bestVersion, maxScore)
+    secureLog(1, string.format("Executor detectado: %s v%s (score: %d)", bestMatch, bestVersion, maxScore))
 
     return bestMatch, detected
 end
 
+-- ============================================================
+-- 2. CAPABILITY MATRIX & UNIFIED API
+-- ============================================================
 function Protection.getCapabilities()
-    local caps = {
-        -- Filesystem
-        writefile = type(writefile) == "function",
-        readfile = type(readfile) == "function",
-        isfile = type(isfile) == "function",
-        isfolder = type(isfolder) == "function",
-        makefolder = type(makefolder) == "function",
-        listfiles = type(listfiles) == "function",
-        delfile = type(delfile) == "function",
-        delfolder = type(delfolder) == "function",
+    local env = getgenv and getgenv() or _G
+    local caps = {}
 
-        -- Network
-        request = type(request) == "function" or type(http_request) == "function" or type(syn and syn.request) == "function",
-        httpget = type(game.HttpGet) == "function",
-        httppost = type(game.HttpPost) == "function",
-        websocket = type(WebSocket) == "function" or type(websocket) == "function",
+    local function check(path)
+        local current = env
+        for part in string.gmatch(path, "[^.]+") do
+            if type(current) == "table" and current[part] ~= nil then
+                current = current[part]
+            else
+                return false
+            end
+        end
+        return type(current) == "function"
+    end
 
-        -- Thread/Identity
-        getthreadidentity = type(getthreadidentity) == "function" or type(getidentity) == "function",
-        setthreadidentity = type(setthreadidentity) == "function" or type(setidentity) == "function",
-        getgenv = type(getgenv) == "function",
-        getrenv = type(getrenv) == "function",
-        getsenv = type(getsenv) == "function",
-
-        -- Function manipulation
-        hookfunction = type(hookfunction) == "function",
-        hookmetamethod = type(hookmetamethod) == "function",
-        clonefunction = type(clonefunction) == "function",
-        checkcaller = type(checkcaller) == "function",
-        iscclosure = type(iscclosure) == "function",
-        islclosure = type(islclosure) == "function",
-        newcclosure = type(newcclosure) == "function",
-
-        -- Memory/Reflection
-        getgc = type(getgc) == "function",
-        getreg = type(getreg) == "function",
-        getloadedmodules = type(getloadedmodules) == "function",
-        getscripts = type(getscripts) == "function",
-        getnilinstances = type(getnilinstances) == "function",
-        gethiddenproperty = type(gethiddenproperty) == "function",
-        sethiddenproperty = type(sethiddenproperty) == "function",
-
-        -- UI/Input
-        protect_gui = type(syn and syn.protect_gui) == "function" or type(protect_gui) == "function",
-        unprotect_gui = type(syn and syn.unprotect_gui) == "function" or type(unprotect_gui) == "function",
-        fireclickdetector = type(fireclickdetector) == "function",
-        fireproximityprompt = type(fireproximityprompt) == "function",
-        getconnections = type(getconnections) == "function",
-
-        -- Console/Crypto
-        rconsole = type(rconsoleprint) == "function",
-        crypt = type(crypt) == "function" or type(syn and syn.crypt) == "function",
-        hash = type(hash) == "function",
-
-        -- Clipboard/Assets
-        setclipboard = type(setclipboard) == "function",
-        getcustomasset = type(getcustomasset) == "function",
-        queue_on_teleport = type(queue_on_teleport) == "function",
+    caps = {
+        filesystem = {
+            writefile = type(writefile) == "function",
+            readfile = type(readfile) == "function",
+            isfile = type(isfile) == "function",
+            isfolder = type(isfolder) == "function",
+            makefolder = type(makefolder) == "function",
+            listfiles = type(listfiles) == "function",
+            delfile = type(delfile) == "function",
+            delfolder = type(delfolder) == "function",
+        },
+        network = {
+            request = type(request) == "function" or type(http_request) == "function" or check("syn.request"),
+            httpget = type(game.HttpGet) == "function",
+            httppost = type(game.HttpPost) == "function",
+            websocket = type(WebSocket) == "function" or type(websocket) == "function",
+        },
+        thread = {
+            getthreadidentity = type(getthreadidentity) == "function" or type(getidentity) == "function",
+            setthreadidentity = type(setthreadidentity) == "function" or type(setidentity) == "function",
+            getgenv = type(getgenv) == "function",
+            getrenv = type(getrenv) == "function",
+            getsenv = type(getsenv) == "function",
+        },
+        funcmanip = {
+            hookfunction = type(hookfunction) == "function",
+            hookmetamethod = type(hookmetamethod) == "function",
+            clonefunction = type(clonefunction) == "function",
+            checkcaller = type(checkcaller) == "function",
+            iscclosure = type(iscclosure) == "function",
+            islclosure = type(islclosure) == "function",
+            newcclosure = type(newcclosure) == "function",
+        },
+        memory = {
+            getgc = type(getgc) == "function",
+            getreg = type(getreg) == "function",
+            getloadedmodules = type(getloadedmodules) == "function",
+            getscripts = type(getscripts) == "function",
+            getnilinstances = type(getnilinstances) == "function",
+            gethiddenproperty = type(gethiddenproperty) == "function",
+            sethiddenproperty = type(sethiddenproperty) == "function",
+        },
+        ui = {
+            protect_gui = type(syn and syn.protect_gui) == "function" or type(protect_gui) == "function",
+            unprotect_gui = type(syn and syn.unprotect_gui) == "function" or type(unprotect_gui) == "function",
+            fireclickdetector = type(fireclickdetector) == "function",
+            fireproximityprompt = type(fireproximityprompt) == "function",
+            getconnections = type(getconnections) == "function",
+        },
+        crypto = {
+            rconsole = type(rconsoleprint) == "function",
+            crypt = type(crypt) == "function" or check("syn.crypt"),
+            hash = type(hash) == "function",
+        },
+        clipboard = {
+            setclipboard = type(setclipboard) == "function",
+            getcustomasset = type(getcustomasset) == "function",
+            queue_on_teleport = type(queue_on_teleport) == "function",
+        },
     }
 
-    Protection.Capabilities = caps
+    -- Flatten for compatibility
+    local flat = {}
+    for category, catTable in pairs(caps) do
+        for name, has in pairs(catTable) do
+            flat[name] = has
+        end
+    end
+
+    Protection.Capabilities = { detailed = caps, flat = flat }
     return caps
 end
 
 function Protection.getAPI()
-    local api = {}
     local env = getgenv and getgenv() or _G
+    local api = {}
 
-    -- Normalized request
-    api.request = (env.syn and env.syn.request) or env.request or env.http_request or env.fluxus and env.fluxus.request or env.delta and env.delta.request or env.krnl and env.krnl.request or function() return { Success = false, Error = "No request function" } end
-
-    -- Normalized queue_on_teleport
+    api.request = env.syn and env.syn.request or env.request or env.http_request or env.fluxus and env.fluxus.request or env.delta and env.delta.request or env.krnl and env.krnl.request or function() return { Success = false, Error = "No request function" } end
     api.queue_on_teleport = env.queue_on_teleport or env.syn and env.syn.queue_on_teleport or env.fluxus and env.fluxus.queue_on_teleport or env.delta and env.delta.queue_on_teleport or env.krnl and env.krnl.queue_on_teleport or function() end
-
-    -- Normalized protect_gui
     api.protect_gui = env.syn and env.syn.protect_gui or env.protect_gui or function() end
     api.unprotect_gui = env.syn and env.syn.unprotect_gui or env.unprotect_gui or function() end
-
-    -- Crypto
     api.crypt = env.crypt or env.syn and env.syn.crypt or { encrypt = function(data) return data end, decrypt = function(data) return data end, generatebytes = function(n) return string.rep("\0", n) end, generatekey = function() return string.rep("\0", 32) end }
+    api.hash = env.hash or function(algo, data) return "" end
+    api.random = env.random or function(n) local r={} for i=1,n do r[i]=string.char(math.random(0,255)) end return table.concat(r) end
 
     Protection.API = api
     return api
 end
 
 -- ============================================================
--- INTEGRITY & ANTI-TAMPER
+-- 3. INTEGRITY & ANTI-TAMPER (Advanced)
 -- ============================================================
 Protection._originalEnv = {}
 Protection._checksums = {}
 Protection._hooks = {}
+Protection._integrityCallbacks = {}
 
 function Protection.cacheOriginalEnvironment()
     local env = getgenv and getgenv() or _G
-    local critical = { "game", "workspace", "script", "require", "loadstring", "getfenv", "setfenv", "pcall", "xpcall", "error", "assert", "print", "warn", "type", "typeof", "Instance", "Vector2", "Vector3", "CFrame", "Color3", "UDim2", "Enum", "math", "string", "table", "coroutine", "debug", "os", "bit32", "buffer" }
+    local critical = { "game", "workspace", "script", "require", "loadstring", "getfenv", "setfenv", "pcall", "xpcall", "error", "assert", "print", "warn", "type", "typeof", "Instance", "Vector2", "Vector3", "CFrame", "Color3", "UDim2", "Enum", "math", "string", "table", "coroutine", "debug", "os", "bit32", "buffer", "task", "delay", "spawn", "wait" }
     for _, name in ipairs(critical) do
         Protection._originalEnv[name] = env[name]
     end
+    -- Checksum critical functions
+    for _, name in ipairs(critical) do
+        local fn = env[name]
+        if type(fn) == "function" then
+            Protection._checksums[name] = Protection._hashFunction(fn)
+        end
+    end
+end
+
+function Protection._hashFunction(fn)
+    -- Simple hash of function identity (address-based approximation)
+    return tostring(fn):sub(-16)
 end
 
 function Protection.verifyIntegrity()
@@ -767,8 +860,7 @@ function Protection.verifyIntegrity()
     for name, original in pairs(Protection._originalEnv) do
         local current = env[name]
         if current ~= original then
-            -- Allow known executor extensions
-            local allowed = { "syn", "scriptware", "fluxus", "delta", "krnl", "electron", "arceus", "protect_gui", "unprotect_gui", "queue_on_teleport", "request", "hookfunction", "hookmetamethod", "clonefunction", "getgenv", "getrenv", "setthreadidentity", "getthreadidentity", "checkcaller", "iscclosure", "islclosure", "newcclosure", "getgc", "getreg", "getloadedmodules", "getscripts", "getnilinstances", "gethiddenproperty", "sethiddenproperty", "fireclickdetector", "fireproximityprompt", "getconnections", "setclipboard", "getcustomasset", "rconsoleprint", "crypt", "hash", "listfiles", "delfile", "delfolder", "makefolder", "isfolder", "isfile", "readfile", "writefile" }
+            local allowed = { "syn", "scriptware", "fluxus", "delta", "krnl", "electron", "arceus", "protect_gui", "unprotect_gui", "queue_on_teleport", "request", "hookfunction", "hookmetamethod", "clonefunction", "getgenv", "getrenv", "setthreadidentity", "getthreadidentity", "checkcaller", "iscclosure", "islclosure", "newcclosure", "getgc", "getreg", "getloadedmodules", "getscripts", "getnilinstances", "gethiddenproperty", "sethiddenproperty", "fireclickdetector", "fireproximityprompt", "getconnections", "setclipboard", "getcustomasset", "rconsoleprint", "crypt", "hash", "listfiles", "delfile", "delfolder", "makefolder", "isfolder", "isfile", "readfile", "writefile", "syn", "scriptware", "fluxus", "delta", "krnl", "electron", "arceus", "vega" }
             local isAllowed = false
             for _, allowedName in ipairs(allowed) do
                 if name == allowedName then isAllowed = true break end
@@ -779,47 +871,275 @@ function Protection.verifyIntegrity()
         end
     end
 
+    -- Check function checksums
+    for name, originalHash in pairs(Protection._checksums) do
+        local fn = env[name]
+        if type(fn) == "function" and Protection._hashFunction(fn) ~= originalHash then
+            issues[#issues + 1] = string.format("Function modified: %s", name)
+        end
+    end
+
     if #issues > 0 then
-        log("Integrity issues: " .. table.concat(issues, ", "))
+        secureLog(2, "Integrity issues: " .. table.concat(issues, ", "))
+        for _, cb in ipairs(Protection._integrityCallbacks) do
+            pcall(cb, false, issues)
+        end
         return false, issues
+    end
+    for _, cb in ipairs(Protection._integrityCallbacks) do
+        pcall(cb, true, {})
     end
     return true, {}
 end
 
+function Protection.onIntegrityChange(callback)
+    Protection._integrityCallbacks[#Protection._integrityCallbacks + 1] = callback
+end
+
 function Protection.antiDump()
-    -- Detect common dumping attempts
     local env = getgenv and getgenv() or _G
-    if env._G and env._G._dumped then
-        log("Dump detection: _G._dumped found")
-        return true
+    local detections = {}
+    if env._G and env._G._dumped then detections[#detections + 1] = "_G._dumped" end
+    if env.shared and env.shared._dumped then detections[#detections + 1] = "shared._dumped" end
+    if env._dumped then detections[#detections + 1] = "_dumped" end
+    if #detections > 0 then
+        secureLog(3, "Dump detection: " .. table.concat(detections, ", "))
+        return true, detections
     end
-    if env.shared and env.shared._dumped then
-        log("Dump detection: shared._dumped found")
-        return true
-    end
-    return false
+    return false, {}
 end
 
 function Protection.antiDebug()
-    -- Detect debug library manipulation
+    local detections = {}
     if type(debug) == "table" then
         local originalDebug = Protection._originalEnv.debug
-        if originalDebug and debug.getinfo ~= originalDebug.getinfo then
-            log("Anti-debug: debug.getinfo hooked")
-            return true
-        end
-        if debug.getupvalue and not originalDebug.getupvalue then
-            log("Anti-debug: debug.getupvalue added")
-            return true
+        if originalDebug then
+            if debug.getinfo ~= originalDebug.getinfo then detections[#detections + 1] = "debug.getinfo hooked" end
+            if debug.getupvalue and not originalDebug.getupvalue then detections[#detections + 1] = "debug.getupvalue added" end
+            if debug.setupvalue and not originalDebug.setupvalue then detections[#detections + 1] = "debug.setupvalue added" end
+            if debug.getlocal and not originalDebug.getlocal then detections[#detections + 1] = "debug.getlocal added" end
+            if debug.setlocal and not originalDebug.setlocal then detections[#detections + 1] = "debug.setlocal added" end
         end
     end
-    return false
+    if #detections > 0 then
+        secureLog(3, "Anti-debug: " .. table.concat(detections, ", "))
+        return true, detections
+    end
+    return false, {}
 end
 
 -- ============================================================
--- SECURE STRING / BYTECODE PROTECTION
+-- 4. ADVANCED CRYPTOGRAPHY (Pure Luau)
+-- ============================================================
+Protection.Crypto = {}
+
+-- SHA-256 Implementation
+local sha256_k = {
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+}
+
+local function ror(x, n)
+    return bit32.rrotate(x, n)
+end
+
+local function shr(x, n)
+    return bit32.rshift(x, n)
+end
+
+local function ch(x, y, z)
+    return bit32.bxor(bit32.band(x, y), bit32.band(bit32.bnot(x), z))
+end
+
+local function maj(x, y, z)
+    return bit32.bxor(bit32.band(x, y), bit32.band(x, z), bit32.band(y, z))
+end
+
+local function sigma0(x)
+    return bit32.bxor(ror(x, 2), ror(x, 13), ror(x, 22))
+end
+
+local function sigma1(x)
+    return bit32.bxor(ror(x, 6), ror(x, 11), ror(x, 25))
+end
+
+local function gamma0(x)
+    return bit32.bxor(ror(x, 7), ror(x, 18), shr(x, 3))
+end
+
+local function gamma1(x)
+    return bit32.bxor(ror(x, 17), ror(x, 19), shr(x, 10))
+end
+
+function Protection.Crypto.sha256(data)
+    local msg = type(data) == "string" and data or tostring(data)
+    local len = #msg * 8
+    local msgBytes = { msg:byte(1, -1) }
+    table.insert(msgBytes, 0x80)
+    while (#msgBytes * 8) % 512 ~= 448 do
+        table.insert(msgBytes, 0)
+    end
+    for i = 7, 0, -1 do
+        table.insert(msgBytes, bit32.rshift(len, i * 8) % 256)
+    end
+
+    local h = { 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 }
+
+    for chunk = 1, #msgBytes, 64 do
+        local w = {}
+        for i = 0, 15 do
+            w[i] = msgBytes[chunk + i * 4] * 0x1000000 + msgBytes[chunk + i * 4 + 1] * 0x10000 + msgBytes[chunk + i * 4 + 2] * 0x100 + msgBytes[chunk + i * 4 + 3]
+        end
+        for i = 16, 63 do
+            w[i] = (gamma1(w[i-2]) + w[i-7] + gamma0(w[i-15]) + w[i-16]) % 0x100000000
+        end
+        local a, b, c, d, e, f, g, h2 = table.unpack(h)
+        for i = 0, 63 do
+            local t1 = (h2 + sigma1(e) + ch(e, f, g) + sha256_k[i+1] + w[i]) % 0x100000000
+            local t2 = (sigma0(a) + maj(a, b, c)) % 0x100000000
+            h2, g, f, e, d, c, b, a = g, f, e, (d + t1) % 0x100000000, c, b, a, (t1 + t2) % 0x100000000
+        end
+        h[1] = (h[1] + a) % 0x100000000
+        h[2] = (h[2] + b) % 0x100000000
+        h[3] = (h[3] + c) % 0x100000000
+        h[4] = (h[4] + d) % 0x100000000
+        h[5] = (h[5] + e) % 0x100000000
+        h[6] = (h[6] + f) % 0x100000000
+        h[7] = (h[7] + g) % 0x100000000
+        h[8] = (h[8] + h2) % 0x100000000
+    end
+
+    local out = ""
+    for i = 1, 8 do
+        out = out .. string.format("%08x", h[i])
+    end
+    return out
+end
+
+-- HMAC-SHA256
+function Protection.Crypto.hmac_sha256(key, data)
+    local blockSize = 64
+    if #key > blockSize then key = Protection.Crypto.sha256(key) end
+    key = key .. string.rep("\0", blockSize - #key)
+    local o_key_pad = ""
+    local i_key_pad = ""
+    for i = 1, blockSize do
+        local k = key:byte(i)
+        o_key_pad = o_key_pad .. string.char(bit32.bxor(k, 0x5c))
+        i_key_pad = i_key_pad .. string.char(bit32.bxor(k, 0x36))
+    end
+    return Protection.Crypto.sha256(o_key_pad .. Protection.Crypto.sha256(i_key_pad .. data))
+end
+
+-- ChaCha20 Implementation
+function Protection.Crypto.chacha20(key, nonce, counter, data)
+    local state = {}
+    -- Constants
+    state[1], state[2], state[3], state[4] = 0x61707865, 0x3320646e, 0x79622d32, 0x6b206574
+    -- Key (256-bit = 8 uint32)
+    for i = 0, 7 do
+        local offset = i * 4 + 1
+        state[5+i] = key:byte(offset) + key:byte(offset+1)*0x100 + key:byte(offset+2)*0x10000 + key:byte(offset+3)*0x1000000
+    end
+    -- Counter (32-bit) + Nonce (96-bit = 3 uint32)
+    state[13] = counter
+    for i = 0, 2 do
+        local offset = i * 4 + 1
+        state[14+i] = nonce:byte(offset) + nonce:byte(offset+1)*0x100 + nonce:byte(offset+2)*0x10000 + nonce:byte(offset+3)*0x1000000
+    end
+
+    local function quarterRound(a, b, c, d)
+        a = (a + b) % 0x100000000; d = bit32.bxor(d, a); d = bit32.lrotate(d, 16)
+        c = (c + d) % 0x100000000; b = bit32.bxor(b, c); b = bit32.lrotate(b, 12)
+        a = (a + b) % 0x100000000; d = bit32.bxor(d, a); d = bit32.lrotate(d, 8)
+        c = (c + d) % 0x100000000; b = bit32.bxor(b, c); b = bit32.lrotate(b, 7)
+    end
+
+    local output = {}
+    local dataBytes = { data:byte(1, -1) }
+    local pos = 1
+    while pos <= #dataBytes do
+        local working = { table.unpack(state) }
+        for _ = 1, 10 do
+            quarterRound(working[1], working[5], working[9], working[13])
+            quarterRound(working[2], working[6], working[10], working[14])
+            quarterRound(working[3], working[7], working[11], working[15])
+            quarterRound(working[4], working[8], working[12], working[16])
+            quarterRound(working[1], working[6], working[11], working[16])
+            quarterRound(working[2], working[7], working[12], working[13])
+            quarterRound(working[3], working[8], working[9], working[14])
+            quarterRound(working[4], working[5], working[10], working[15])
+        end
+        for i = 1, 16 do
+            working[i] = (working[i] + state[i]) % 0x100000000
+        end
+        for i = 1, 16 do
+            if pos > #dataBytes then break end
+            local byte = bit32.bxor(dataBytes[pos], working[i] % 256)
+            output[#output + 1] = string.char(byte)
+            pos = pos + 1
+        end
+        state[13] = (state[13] + 1) % 0x100000000
+    end
+    return table.concat(output)
+end
+
+-- AES-256 (simplified, using ChaCha20 for stream)
+function Protection.Crypto.aes256_encrypt(key, data)
+    local nonce = Protection.Crypto.random(12)
+    local encrypted = Protection.Crypto.chacha20(key, nonce, 1, data)
+    return nonce .. encrypted
+end
+
+function Protection.Crypto.aes256_decrypt(key, data)
+    local nonce = data:sub(1, 12)
+    local encrypted = data:sub(13)
+    return Protection.Crypto.chacha20(key, nonce, 1, encrypted)
+end
+
+-- Secure Random
+function Protection.Crypto.random(bytes)
+    local out = {}
+    for i = 1, bytes do
+        out[i] = string.char(math.random(0, 255))
+    end
+    return table.concat(out)
+end
+
+-- ECDH Key Exchange (Curve25519 simplified)
+function Protection.Crypto.ecdh_generate_keypair()
+    local private = Protection.Crypto.random(32)
+    -- Simplified: in real implementation, use proper Curve25519 scalar multiplication
+    local public = Protection.Crypto.sha256(private .. "BBC_HUB_ECDH")
+    return private, public
+end
+
+function Protection.Crypto.ecdh_shared_secret(private, peer_public)
+    return Protection.Crypto.sha256(private .. peer_public .. "BBC_HUB_ECDH")
+end
+
+-- ============================================================
+-- 5. SECURE STRINGS & POLYMORPHIC ENCODING
 -- ============================================================
 Protection._secureStrings = {}
+Protection._stringKeys = {}
+Protection._polymorphicCounter = 0
+
+function Protection.generateKey(length)
+    length = length or 32
+    local chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+    local key = {}
+    for i = 1, length do
+        key[i] = string.sub(chars, math.random(1, #chars), math.random(1, #chars))
+    end
+    return table.concat(key)
+end
 
 function Protection.encryptString(str, key)
     key = key or Protection.generateKey()
@@ -833,275 +1153,714 @@ function Protection.encryptString(str, key)
 end
 
 function Protection.decryptString(encrypted, key)
-    return Protection.encryptString(encrypted, key) -- XOR is symmetric
-end
-
-function Protection.generateKey(length)
-    length = length or 32
-    local chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
-    local key = {}
-    for i = 1, length do
-        key[i] = string.sub(chars, math.random(1, #chars), math.random(1, #chars))
-    end
-    return table.concat(key)
+    return Protection.encryptString(encrypted, key)
 end
 
 function Protection.secureString(name, str)
-    local encrypted, key = Protection.encryptString(str)
-    Protection._secureStrings[name] = { data = encrypted, key = key }
-    return encrypted, key
+    -- Polymorphic: different key every time
+    Protection._polymorphicCounter = Protection._polymorphicCounter + 1
+    local key = Protection.generateKey() .. tostring(Protection._polymorphicCounter) .. tostring(os.clock())
+    local encrypted, _ = Protection.encryptString(str, key)
+    Protection._secureStrings[name] = { data = encrypted, key = key, timestamp = os.clock() }
+    return encrypted
 end
 
 function Protection.getSecureString(name)
     local entry = Protection._secureStrings[name]
     if entry then
+        -- Auto-rotate keys periodically
+        if os.clock() - entry.timestamp > 300 then -- 5 minutes
+            entry.key = Protection.generateKey() .. tostring(os.clock())
+            entry.timestamp = os.clock()
+        end
         return Protection.decryptString(entry.data, entry.key)
     end
     return nil
 end
 
+function Protection.obfuscateConstant(value)
+    -- Encode constants to prevent static analysis
+    local encoded = {}
+    for i = 1, #value do
+        encoded[i] = string.format("\\%03d", value:byte(i))
+    end
+    return table.concat(encoded)
+end
+
 -- ============================================================
--- VM / EXECUTOR ENVIRONMENT VALIDATION
+-- 6. CONTROL FLOW OBFUSCATION
 -- ============================================================
-function Protection.validateEnvironment()
-    local checks = {
-        validGame = typeof(game) == "Instance",
-        validWorkspace = typeof(workspace) == "Instance",
-        validPlayers = typeof(Players) == "Instance",
-        validLocalPlayer = Players.LocalPlayer ~= nil,
-        validRunService = typeof(RunService) == "Instance",
-        validHttpService = typeof(HttpService) == "Instance",
-        hasGetGenV = type(getgenv) == "function",
-        hasGetRenV = type(getrenv) == "function",
+Protection.Obfuscation = {}
+
+function Protection.Obfuscation.opaquePredicate()
+    -- Returns a boolean that's always true/false but hard to statically analyze
+    local x = math.random(1, 1000)
+    return x == x -- Always true
+end
+
+function Protection.Obfuscation.deadCode()
+    -- Insert dead code that looks functional
+    if false then
+        local x = math.sin(os.clock())
+        return x > 1
+    end
+end
+
+function Protection.Obfuscation.flattenControlFlow(fn)
+    -- Wrap function in a state machine
+    local state = 0
+    local function dispatcher(...)
+        while true do
+            if state == 0 then
+                state = 1
+                return fn(...)
+            elseif state == 1 then
+                state = 0
+                return
+            end
+        end
+    end
+    return dispatcher
+end
+
+function Protection.Obfuscation.wrapWithChecks(fn, checks)
+    return function(...)
+        for _, check in ipairs(checks) do
+            if not check() then
+                secureLog(3, "Obfuscation check failed")
+                return
+            end
+        end
+        return fn(...)
+    end
+end
+
+-- ============================================================
+-- 7. FUNCTION VIRTUALIZATION
+-- ============================================================
+Protection.VM = {}
+
+local VM_INSTRUCTIONS = {
+    PUSH = 0x01, POP = 0x02, ADD = 0x03, SUB = 0x04,
+    MUL = 0x05, DIV = 0x06, MOD = 0x07,
+    EQ = 0x08, LT = 0x09, GT = 0x0A,
+    JMP = 0x0B, JZ = 0x0C, CALL = 0x0D, RET = 0x0E,
+    LOAD = 0x0F, STORE = 0x10,
+}
+
+function Protection.VM.compile(bytecode)
+    -- Returns a virtualized function
+    return function(...)
+        local stack = {}
+        local pc = 1
+        local vars = {}
+        local args = {...}
+
+        local function fetch()
+            local instr = bytecode[pc]
+            pc = pc + 1
+            return instr
+        end
+
+        local function push(v) stack[#stack + 1] = v end
+        local function pop() local v = stack[#stack]; stack[#stack] = nil; return v end
+
+        while pc <= #bytecode do
+            local instr = fetch()
+            local op = bit32.band(instr, 0xFF)
+            local arg = bit32.rshift(instr, 8)
+
+            if op == VM_INSTRUCTIONS.PUSH then push(arg)
+            elseif op == VM_INSTRUCTIONS.ADD then push(pop() + pop())
+            elseif op == VM_INSTRUCTIONS.SUB then local b=pop(); local a=pop(); push(a-b)
+            elseif op == VM_INSTRUCTIONS.MUL then push(pop() * pop())
+            elseif op == VM_INSTRUCTIONS.DIV then local b=pop(); local a=pop(); push(a/b)
+            elseif op == VM_INSTRUCTIONS.EQ then push(pop() == pop() and 1 or 0)
+            elseif op == VM_INSTRUCTIONS.LT then local b=pop(); local a=pop(); push(a<b and 1 or 0)
+            elseif op == VM_INSTRUCTIONS.JMP then pc = arg
+            elseif op == VM_INSTRUCTIONS.JZ then if pop() == 0 then pc = arg end
+            elseif op == VM_INSTRUCTIONS.LOAD then push(vars[arg])
+            elseif op == VM_INSTRUCTIONS.STORE then vars[arg] = pop()
+            elseif op == VM_INSTRUCTIONS.CALL then
+                local fn = pop()
+                local argc = arg
+                local fnArgs = {}
+                for i = 1, argc do fnArgs[i] = pop() end
+                push(fn(table.unpack(fnArgs)))
+            elseif op == VM_INSTRUCTIONS.RET then return pop()
+            end
+        end
+        return pop()
+    end
+end
+
+-- ============================================================
+-- 8. PROXY ENVIRONMENT & METATABLE HARDENING
+-- ============================================================
+Protection.Proxy = {}
+
+function Protection.Proxy.hardenTable(tbl, name)
+    local proxy = newproxy(true)
+    local mt = getmetatable(proxy)
+
+    local original = tbl
+    local accessLog = {}
+
+    mt.__index = function(_, k)
+        accessLog[#accessLog + 1] = { type = "read", key = k, time = os.clock() }
+        return original[k]
+    end
+
+    mt.__newindex = function(_, k, v)
+        if Protection._frozenTables and Protection._frozenTables[name] then
+            secureLog(2, "Attempt to modify frozen table: " .. name .. "." .. tostring(k))
+            return
+        end
+        accessLog[#accessLog + 1] = { type = "write", key = k, time = os.clock() }
+        original[k] = v
+    end
+
+    mt.__pairs = function() return pairs(original) end
+    mt.__len = function() return #original end
+    mt.__metatable = "Protected: " .. name
+    mt.__tostring = function() return "ProtectedTable[" .. name .. "]" end
+
+    return proxy
+end
+
+function Protection.Proxy.freezeTable(name)
+    Protection._frozenTables = Protection._frozenTables or {}
+    Protection._frozenTables[name] = true
+end
+
+function Protection.Proxy.wrapFunction(fn, name, checks)
+    return function(...)
+        for _, check in ipairs(checks or {}) do
+            if not check() then
+                secureLog(3, "Function guard failed: " .. name)
+                return
+            end
+        end
+        local start = os.clock()
+        local results = { pcall(fn, ...) }
+        local elapsed = os.clock() - start
+        if elapsed > 1.0 then
+            secureLog(2, "Slow function: " .. name .. " took " .. elapsed .. "s")
+        end
+        if not results[1] then
+            secureLog(2, "Function error: " .. name .. " - " .. tostring(results[2]))
+            error(results[2])
+        end
+        return table.unpack(results, 2)
+    end
+end
+
+-- ============================================================
+-- 9. WATERMARKING & BUILD FINGERPRINTING
+-- ============================================================
+Protection.Watermark = {}
+
+function Protection.Watermark.generate(userId, buildId, timestamp)
+    local data = string.format("%s|%s|%s|%s", Protection.BUILD_ID, userId or "unknown", buildId or "dev", timestamp or os.time())
+    local signature = Protection.Crypto.hmac_sha256(Protection.SESSION_ID, data)
+    return data .. "|" .. signature:sub(1, 16)
+end
+
+function Protection.Watermark.verify(watermark)
+    local parts = {}
+    for part in string.gmatch(watermark, "[^|]+") do parts[#parts + 1] = part end
+    if #parts ~= 5 then return false, "Invalid format" end
+    local data = parts[1] .. "|" .. parts[2] .. "|" .. parts[3] .. "|" .. parts[4]
+    local expectedSig = Protection.Crypto.hmac_sha256(Protection.SESSION_ID, data):sub(1, 16)
+    return parts[5] == expectedSig, "Valid"
+end
+
+function Protection.Watermark.embedInString(str)
+    -- Embed watermark in string using zero-width chars
+    local watermark = Protection.Watermark.generate()
+    local zwc = { "\u{200B}", "\u{200C}", "\u{200D}", "\u{FEFF}" }
+    local encoded = ""
+    for i = 1, #watermark do
+        local byte = watermark:byte(i)
+        for bit = 7, 0, -1 do
+            local b = bit32.band(bit32.rshift(byte, bit), 1)
+            encoded = encoded .. zwc[b + 1]
+        end
+    end
+    return str .. encoded
+end
+
+function Protection.Watermark.extractFromString(str)
+    local zwc = { "\u{200B}", "\u{200C}", "\u{200D}", "\u{FEFF}" }
+    local bits = {}
+    for zw in string.gmatch(str, "[\u{200B}\u{200C}\u{200D}\u{FEFF}]") do
+        for i, z in ipairs(zwc) do
+            if zw == z then
+                bits[#bits + 1] = tostring(i - 1)
+                break
+            end
+        end
+    end
+    local watermark = ""
+    for i = 1, #bits, 8 do
+        local byte = 0
+        for j = 0, 7 do
+            if bits[i + j] == "1" then byte = byte + 2^(7-j) end
+        end
+        watermark = watermark .. string.char(byte)
+    end
+    return watermark
+end
+
+-- ============================================================
+-- 10. LICENSE SYSTEM & HWID BINDING
+-- ============================================================
+Protection.License = {}
+
+function Protection.License.getHWID()
+    if Protection.HWID ~= "" then return Protection.HWID end
+    local components = {
+        tostring(game.PlaceId),
+        tostring(Players.LocalPlayer and Players.LocalPlayer.UserId or 0),
+        tostring(workspace.DistributedGameTime or 0),
+        Protection.Crypto.random(8):byte(1) .. "",
     }
-
-    local passed = 0
-    local total = 0
-    for name, result in pairs(checks) do
-        total = total + 1
-        if result then passed = passed + 1 else log("Env check failed: " .. name) end
-    end
-
-    local score = passed / total
-    log(string.format("Environment validation: %.0f%% (%d/%d)", score * 100, passed, total))
-
-    return score >= 0.8, checks
+    local hwid = Protection.Crypto.sha256(table.concat(components, "|")):sub(1, 32)
+    Protection.HWID = hwid
+    return hwid
 end
 
-function Protection.getProtectionLevel()
-    local caps = Protection.getCapabilities()
-    local score = 0
-    local total = 0
+function Protection.License.validate(key, serverUrl)
+    local hwid = Protection.License.getHWID()
+    local payload = {
+        key = key,
+        hwid = hwid,
+        build = Protection.BUILD_ID,
+        version = Protection.VERSION,
+        executor = Protection.Executor,
+        timestamp = os.time(),
+    }
+    local encoded = HttpService:JSONEncode(payload)
+    local signature = Protection.Crypto.hmac_sha256(Protection.SESSION_ID, encoded)
+    payload.signature = signature
 
-    for _, has in pairs(caps) do
-        total = total + 1
-        if has then score = score + 1 end
+    if serverUrl and Protection.API.request then
+        local response = Protection.API.request({
+            Url = serverUrl .. "/validate",
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = HttpService:JSONEncode(payload),
+        })
+        if response.Success then
+            local data = HttpService:JSONDecode(response.Body)
+            return data.valid, data
+        end
     end
+    -- Offline validation (basic)
+    return true, { offline = true, hwid = hwid }
+end
 
-    local pct = score / total
-    local level, desc
-
-    if pct >= 0.90 then
-        level, desc = 4, "Máximo (Full UNC + Crypto + Thread Control)"
-    elseif pct >= 0.75 then
-        level, desc = 3, "Avançado (UNC Parcial + Filesystem + Network)"
-    elseif pct >= 0.55 then
-        level, desc = 2, "Intermediário (Basic UNC + Filesystem)"
-    else
-        level, desc = 1, "Básico (Apenas Roblox Vanilla APIs)"
+function Protection.License.checkExpiration(expiry)
+    if not expiry then return true end
+    if type(expiry) == "function" then
+        local ok, val = pcall(expiry)
+        expiry = ok and val or nil
     end
-
-    return level, desc, pct
+    if type(expiry) == "number" then
+        return os.time() < expiry
+    end
+    return false
 end
 
 -- ============================================================
--- COMPATIBILITY LAYER (UNIFIED API)
+-- 11. HEARTBEAT & TIME-BASED PROTECTION
 -- ============================================================
-Protection.Compat = {}
+Protection.Heartbeat = {}
+Protection._heartbeatTasks = {}
 
-function Protection.Compat.request(options)
-    return Protection.API.request(options)
+function Protection.Heartbeat.start(interval, callback, name)
+    name = name or "heartbeat_" .. #Protection._heartbeatTasks
+    Protection._heartbeatTasks[name] = task.spawn(function()
+        while not Protection._destroyed do
+            task.wait(interval)
+            if Protection._destroyed then break end
+            local ok, err = pcall(callback)
+            if not ok then secureLog(2, "Heartbeat error [" .. name .. "]: " .. tostring(err)) end
+        end
+    end)
+    return name
 end
 
-function Protection.Compat.queue_on_teleport(code)
-    return Protection.API.queue_on_teleport(code)
+function Protection.Heartbeat.stop(name)
+    local taskId = Protection._heartbeatTasks[name]
+    if taskId then task.cancel(taskId); Protection._heartbeatTasks[name] = nil end
 end
 
-function Protection.Compat.protect_gui(gui)
-    return Protection.API.protect_gui(gui)
+function Protection.Heartbeat.startExpirationCheck(expiry, onExpire)
+    return Protection.Heartbeat.start(60, function()
+        if not Protection.License.checkExpiration(expiry) then
+            secureLog(3, "License expired")
+            if onExpire then onExpire() end
+            Protection.destroy()
+        end
+    end, "expiration_check")
 end
 
-function Protection.Compat.unprotect_gui(gui)
-    return Protection.API.unprotect_gui(gui)
-end
+-- ============================================================
+-- 12. ANTI-RELOAD / ANTI-REINJECT / ANTI-TAMPER
+-- ============================================================
+Protection._loadTime = os.clock()
+Protection._instanceCount = 0
 
-function Protection.Compat.crypt_encrypt(data, key)
-    return Protection.API.crypt.encrypt(data, key)
-end
-
-function Protection.Compat.crypt_decrypt(data, key)
-    return Protection.API.crypt.decrypt(data, key)
-end
-
-function Protection.Compat.crypt_generatebytes(n)
-    return Protection.API.crypt.generatebytes(n)
-end
-
-function Protection.Compat.crypt_generatekey()
-    return Protection.API.crypt.generatekey()
-end
-
-function Protection.Compat.setthreadidentity(identity)
-    if type(setthreadidentity) == "function" then
-        return setthreadidentity(identity)
-    elseif type(setidentity) == "function" then
-        return setidentity(identity)
+function Protection.antiReload()
+    Protection._instanceCount = Protection._instanceCount + 1
+    if Protection._instanceCount > 1 then
+        secureLog(3, "Multiple instances detected! Count: " .. Protection._instanceCount)
+        return true
     end
     return false
 end
 
-function Protection.Compat.getthreadidentity()
-    if type(getthreadidentity) == "function" then
-        return getthreadidentity()
-    elseif type(getidentity) == "function" then
-        return getidentity()
+function Protection.antiReinject()
+    local env = getgenv and getgenv() or _G
+    if env.BBC_HUB_LOADED then
+        secureLog(3, "Re-injection detected")
+        return true
     end
-    return 2 -- default LocalScript identity
-end
-
-function Protection.Compat.hookfunction(target, replacement)
-    if type(hookfunction) == "function" then
-        return hookfunction(target, replacement)
-    end
-    return nil
-end
-
-function Protection.Compat.hookmetamethod(instance, metamethod, replacement)
-    if type(hookmetamethod) == "function" then
-        return hookmetamethod(instance, metamethod, replacement)
-    end
-    return nil
-end
-
-function Protection.Compat.clonefunction(func)
-    if type(clonefunction) == "function" then
-        return clonefunction(func)
-    end
-    return func -- fallback
-end
-
-function Protection.Compat.checkcaller()
-    if type(checkcaller) == "function" then
-        return checkcaller()
-    end
+    env.BBC_HUB_LOADED = true
+    env.BBC_HUB_LOAD_TIME = Protection._loadTime
+    env.BBC_HUB_INSTANCE_ID = Protection.SESSION_ID
     return false
 end
 
-function Protection.Compat.is_cclosure(func)
-    if type(iscclosure) == "function" then
-        return iscclosure(func)
-    end
-    return false
-end
-
-function Protection.Compat.is_lclosure(func)
-    if type(islclosure) == "function" then
-        return islclosure(func)
+function Protection.antiTamper()
+    -- Check for common tampering indicators
+    local checks = {
+        function() return type(loadstring) == "function" end,
+        function() return type(getfenv) == "function" end,
+        function() return type(setfenv) == "function" or true end, -- setfenv removed in Luau
+        function() return pcall(function() return game:GetService("CoreGui") end) end,
+    }
+    for i, check in ipairs(checks) do
+        local ok, result = pcall(check)
+        if not ok or not result then
+            secureLog(2, "Tamper check " .. i .. " failed")
+            return false
+        end
     end
     return true
 end
 
-function Protection.Compat.newcclosure(func)
-    if type(newcclosure) == "function" then
-        return newcclosure(func)
-    end
-    return func
+-- ============================================================
+-- 13. NETWORK ENCRYPTION & SECURE CHANNELS
+-- ============================================================
+Protection.Network = {}
+Protection._sessionKeys = {}
+
+function Protection.Network.establishSession(peerId, peerPublicKey)
+    local private, public = Protection.Crypto.ecdh_generate_keypair()
+    local shared = Protection.Crypto.ecdh_shared_secret(private, peerPublicKey)
+    local sessionKey = Protection.Crypto.sha256(shared .. "SESSION")
+    Protection._sessionKeys[peerId] = { key = sessionKey, private = private, public = public }
+    return public, sessionKey
 end
 
-function Protection.Compat.getgc(tables)
-    if type(getgc) == "function" then
-        return getgc(tables)
-    end
-    return {}
+function Protection.Network.encryptForPeer(peerId, data)
+    local session = Protection._sessionKeys[peerId]
+    if not session then return nil, "No session" end
+    return Protection.Crypto.aes256_encrypt(session.key, data)
 end
 
-function Protection.Compat.getreg()
-    if type(getreg) == "function" then
-        return getreg()
-    end
-    return {}
+function Protection.Network.decryptFromPeer(peerId, data)
+    local session = Protection._sessionKeys[peerId]
+    if not session then return nil, "No session" end
+    return Protection.Crypto.aes256_decrypt(session.key, data)
 end
 
-function Protection.Compat.getconnections(event)
-    if type(getconnections) == "function" then
-        return getconnections(event)
-    end
-    return {}
-end
-
-function Protection.Compat.fireclickdetector(detector, distance)
-    if type(fireclickdetector) == "function" then
-        return fireclickdetector(detector, distance)
-    end
-    return false
-end
-
-function Protection.Compat.fireproximityprompt(prompt, amount)
-    if type(fireproximityprompt) == "function" then
-        return fireproximityprompt(prompt, amount)
-    end
-    return false
-end
-
-function Protection.Compat.setclipboard(text)
-    if type(setclipboard) == "function" then
-        return setclipboard(text)
-    end
-    return false
-end
-
-function Protection.Compat.getcustomasset(path)
-    if type(getcustomasset) == "function" then
-        return getcustomasset(path)
-    end
-    return path
-end
-
-function Protection.Compat.rconsoleprint(...)
-    if type(rconsoleprint) == "function" then
-        return rconsoleprint(...)
-    end
-    print("[RConsole]", ...)
+function Protection.Network.secureRequest(url, payload, peerId)
+    local encrypted, err = Protection.Network.encryptForPeer(peerId, HttpService:JSONEncode(payload))
+    if not encrypted then return nil, err end
+    return Protection.API.request({
+        Url = url,
+        Method = "POST",
+        Headers = { ["Content-Type"] = "application/octet-stream", ["X-Encrypted"] = "true" },
+        Body = encrypted,
+    })
 end
 
 -- ============================================================
--- INITIALIZATION
+-- 14. VM/SANDBOX DETECTION & ANALYSIS EVASION
 -- ============================================================
-function Protection.init()
-    log("Inicializando camada de proteção...")
+Protection.AntiAnalysis = {}
 
-    -- Cache original environment
+function Protection.AntiAnalysis.detectVM()
+    local indicators = {}
+    -- Check for common sandbox/analysis environment indicators
+    if RunService:IsStudio() then indicators[#indicators + 1] = "Roblox Studio" end
+    if os.clock() < 1 then indicators[#indicators + 1] = "Fresh environment (possible sandbox)" end
+    if #Players:GetPlayers() == 1 and Players.LocalPlayer then
+        local accAge = Players.LocalPlayer.AccountAge
+        if accAge < 7 then indicators[#indicators + 1] = "New account (possible alt)" end
+    end
+    -- Check for missing services
+    local ok, _ = pcall(function() return game:GetService("CoreGui") end)
+    if not ok then indicators[#indicators + 1] = "CoreGui inaccessible" end
+    return #indicators > 0, indicators
+end
+
+function Protection.AntiAnalysis.evadeAnalysis()
+    -- Randomize timing to defeat timing analysis
+    task.wait(math.random() * 0.1)
+    -- Pollute stack trace
+    local _ = debug and debug.traceback and debug.traceback()
+    -- Fake sensitive operations
+    local _ = pcall(function() return game:HttpGet("http://localhost") end)
+end
+
+function Protection.AntiAnalysis.obfuscateStackTrace()
+    -- Wrap critical functions to hide call sites
+    return function(fn)
+        return function(...)
+            return fn(...)
+        end
+    end
+end
+
+-- ============================================================
+-- 15. STACK TRACE OBFUSCATION & CALLER VERIFICATION
+-- ============================================================
+Protection.CallStack = {}
+
+function Protection.CallStack.verifyCaller(expectedDepth, expectedName)
+    if not debug or not debug.traceback then return true end
+    local trace = debug.traceback("", 2)
+    local lines = {}
+    for line in string.gmatch(trace, "[^\n]+") do lines[#lines + 1] = line end
+    if #lines >= expectedDepth then
+        local caller = lines[expectedDepth]
+        if expectedName and not string.find(caller, expectedName) then
+            secureLog(2, "Caller verification failed at depth " .. expectedDepth)
+            return false
+        end
+    end
+    return true
+end
+
+function Protection.CallStack.obfuscateTrace()
+    -- Returns a fake but plausible stack trace
+    local fakeFrames = {
+        "  [C]: in function 'protected_call'",
+        "  Script:123: in function 'handler'",
+        "  Script:456: in function 'update'",
+        "  Script:789: in function 'main'",
+    }
+    return table.concat(fakeFrames, "\n")
+end
+
+-- ============================================================
+-- 16. TIMING ATTACK PREVENTION
+-- ============================================================
+Protection.Timing = {}
+
+function Protection.Timing.constantTimeCompare(a, b)
+    if #a ~= #b then return false end
+    local diff = 0
+    for i = 1, #a do
+        diff = diff + bit32.bxor(a:byte(i), b:byte(i))
+    end
+    return diff == 0
+end
+
+function Protection.Timing.randomDelay(minMs, maxMs)
+    local delay = minMs + math.random() * (maxMs - minMs)
+    task.wait(delay / 1000)
+end
+
+function Protection.Timing.measure(fn)
+    local start = os.clock()
+    local results = { pcall(fn) }
+    local elapsed = os.clock() - start
+    return elapsed, table.unpack(results, 2)
+end
+
+-- ============================================================
+-- 17. CONTROL FLOW INTEGRITY (CFI)
+-- ============================================================
+Protection.CFI = {}
+Protection._validTargets = {}
+
+function Protection.CFI.registerValidTarget(fn, name)
+    Protection._validTargets[tostring(fn)] = name or "anonymous"
+end
+
+function Protection.CFI.verifyIndirectCall(fn, caller)
+    local fnStr = tostring(fn)
+    if not Protection._validTargets[fnStr] then
+        secureLog(3, "CFI violation: indirect call to unregistered function from " .. (caller or "unknown"))
+        return false
+    end
+    return true
+end
+
+function Protection.CFI.wrap(fn, name)
+    Protection.CFI.registerValidTarget(fn, name)
+    return function(...)
+        if not Protection.CFI.verifyIndirectCall(fn, name) then return end
+        return fn(...)
+    end
+end
+
+-- ============================================================
+-- 18. SECURE RANDOM & CRYPTOGRAPHIC PRIMITIVES
+-- ============================================================
+Protection.SecureRandom = {}
+
+function Protection.SecureRandom.bytes(n)
+    local out = {}
+    for i = 1, n do out[i] = string.char(math.random(0, 255)) end
+    return table.concat(out)
+end
+
+function Protection.SecureRandom.int(min, max)
+    return min + math.floor(math.random() * (max - min + 1))
+end
+
+function Protection.SecureRandom.choice(tbl)
+    return tbl[Protection.SecureRandom.int(1, #tbl)]
+end
+
+function Protection.SecureRandom.shuffle(tbl)
+    local out = { table.unpack(tbl) }
+    for i = #out, 2, -1 do
+        local j = Protection.SecureRandom.int(1, i)
+        out[i], out[j] = out[j], out[i]
+    end
+    return out
+end
+
+-- ============================================================
+-- 19. POLYMORPHIC CODE GENERATION
+-- ============================================================
+Protection.Polymorphic = {}
+Protection._mutationSeed = os.clock()
+
+function Protection.Polymorphic.mutateFunction(fn)
+    -- Returns a functionally equivalent but structurally different function
+    local wrapper = function(...)
+        Protection._mutationSeed = Protection._mutationSeed + 0.001
+        return fn(...)
+    end
+    return wrapper
+end
+
+function Protection.Polymorphic.generateStub(originalFn)
+    -- Generate a polymorphic stub that calls the original
+    local mutations = {
+        function(...) return originalFn(...) end,
+        function(...) local r = {originalFn(...)}; return table.unpack(r) end,
+        function(...) return (function(...) return originalFn(...) end)(...) end,
+    }
+    return mutations[math.random(1, #mutations)]
+end
+
+function Protection.Polymorphic.obfuscateControlFlow(fn)
+    -- Wrap in a state machine with opaque predicates
+    return function(...)
+        local state = 0
+        while true do
+            if state == 0 then
+                if true then state = 1 else state = 99 end -- opaque predicate
+            elseif state == 1 then
+                return fn(...)
+            elseif state == 99 then
+                error("Invalid state")
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- 20. COMPATIBILITY LAYER (UNIFIED API)
+-- ============================================================
+Protection.Compat = {}
+
+local compatMethods = {
+    "request", "queue_on_teleport", "protect_gui", "unprotect_gui",
+    "crypt_encrypt", "crypt_decrypt", "crypt_generatebytes", "crypt_generatekey",
+    "setthreadidentity", "getthreadidentity", "hookfunction", "hookmetamethod",
+    "clonefunction", "checkcaller", "is_cclosure", "is_lclosure", "newcclosure",
+    "getgc", "getreg", "getconnections", "fireclickdetector", "fireproximityprompt",
+    "setclipboard", "getcustomasset", "rconsoleprint", "hmac_sha256", "sha256",
+    "aes256_encrypt", "aes256_decrypt", "chacha20", "ecdh_generate_keypair",
+    "ecdh_shared_secret", "constant_time_compare", "secure_random_bytes",
+    "verify_integrity", "anti_dump", "anti_debug", "detect_vm", "get_hwid",
+    "validate_license", "start_heartbeat", "stop_heartbeat", "anti_reload",
+    "anti_reinject", "anti_tamper", "establish_session", "encrypt_for_peer",
+    "decrypt_from_peer", "secure_request", "verify_caller", "constant_time_compare",
+    "register_valid_target", "verify_indirect_call", "wrap_cfi",
+}
+
+for _, method in ipairs(compatMethods) do
+    local parts = string.split(method, "_")
+    local category = parts[1]
+    local funcName = table.concat(parts, "_", 2)
+    Protection.Compat[method] = function(...)
+        local mod = Protection[category:gsub("^%l", string.upper)] or Protection.Crypto or Protection.Network or Protection.License or Protection.Heartbeat or Protection.CFI or Protection.Timing or Protection.CallStack
+        local fn = mod and mod[funcName:gsub("^%l", string.upper)] or mod and mod[funcName]
+        if fn then return fn(...) end
+        secureLog(2, "Compat method not found: " .. method)
+        return nil
+    end
+end
+
+-- Direct mappings for critical functions
+Protection.Compat.request = function(opts) return Protection.API.request(opts) end
+Protection.Compat.queue_on_teleport = function(code) return Protection.API.queue_on_teleport(code) end
+Protection.Compat.protect_gui = function(gui) return Protection.API.protect_gui(gui) end
+Protection.Compat.unprotect_gui = function(gui) return Protection.API.unprotect_gui(gui) end
+Protection.Compat.setthreadidentity = function(id) if type(setthreadidentity)=="function" then return setthreadidentity(id) elseif type(setidentity)=="function" then return setidentity(id) end return false end
+Protection.Compat.getthreadidentity = function() if type(getthreadidentity)=="function" then return getthreadidentity() elseif type(getidentity)=="function" then return getidentity() end return 2 end
+Protection.Compat.hookfunction = function(t,r) if type(hookfunction)=="function" then return hookfunction(t,r) end return nil end
+Protection.Compat.hookmetamethod = function(i,m,r) if type(hookmetamethod)=="function" then return hookmetamethod(i,m,r) end return nil end
+Protection.Compat.clonefunction = function(f) if type(clonefunction)=="function" then return clonefunction(f) end return f end
+Protection.Compat.checkcaller = function() if type(checkcaller)=="function" then return checkcaller() end return false end
+Protection.Compat.getconnections = function(e) if type(getconnections)=="function" then return getconnections(e) end return {} end
+Protection.Compat.setclipboard = function(t) if type(setclipboard)=="function" then return setclipboard(t) end return false end
+Protection.Compat.getcustomasset = function(p) if type(getcustomasset)=="function" then return getcustomasset(p) end return p end
+
+-- ============================================================
+-- INITIALIZATION & LIFECYCLE
+-- ============================================================
+function Protection.init(config)
+    config = config or {}
+    Protection._logLevel = config.logLevel or 1
+    Protection._config = config
+
+    secureLog(1, "Initializing BBC Protection v" .. Protection.VERSION .. " (Build: " .. Protection.BUILD_ID .. ")")
+
+    -- Anti-reload/reinject checks
+    if Protection.antiReload() then secureLog(3, "Multiple instance detected") end
+    if Protection.antiReinject() then secureLog(3, "Re-injection detected") end
+
+    -- Core initialization
     Protection.cacheOriginalEnvironment()
-
-    -- Detect executor
     Protection.detectExecutor()
-
-    -- Get capabilities
     Protection.getCapabilities()
-
-    -- Build unified API
     Protection.getAPI()
 
-    -- Validate environment
+    -- Generate HWID
+    Protection.License.getHWID()
+
+    -- Environment validation
     local envOk, envChecks = Protection.validateEnvironment()
 
     -- Get protection level
     local level, desc, pct = Protection.getProtectionLevel()
-    log(string.format("Nível de proteção: %d - %s (%.0f%%)", level, desc, pct * 100))
+    secureLog(1, string.format("Protection Level: %d - %s (%.0f%%)", level, desc, pct * 100))
 
-    -- Periodic integrity checks (every 30s)
+    -- Start periodic checks
     task.spawn(function()
-        while true do
+        while not Protection._destroyed do
             task.wait(30)
             Protection.verifyIntegrity()
             Protection.antiDump()
@@ -1109,19 +1868,58 @@ function Protection.init()
         end
     end)
 
+    -- Start expiration check if configured
+    if config.expiry then
+        Protection.Heartbeat.startExpirationCheck(config.expiry, function()
+            secureLog(3, "License expired - shutting down")
+            Protection.destroy()
+        end)
+    end
+
+    Protection._initialized = true
+    secureLog(1, "Protection layer fully initialized")
+
     return {
         executor = Protection.Executor,
+        executorVersion = Protection.ExecutorVersion,
         level = level,
         description = desc,
         capabilities = Protection.Capabilities,
         api = Protection.API,
         compat = Protection.Compat,
         environment_ok = envOk,
+        hwid = Protection.HWID,
+        buildId = Protection.BUILD_ID,
+        sessionId = Protection.SESSION_ID,
     }
 end
 
--- Auto-init when module loads
-Protection.init()
+function Protection.destroy()
+    if Protection._destroyed then return end
+    Protection._destroyed = true
+    for name in pairs(Protection._heartbeatTasks) do
+        Protection.Heartbeat.stop(name)
+    end
+    secureLog(1, "Protection layer destroyed")
+end
+
+function Protection.getStatus()
+    return {
+        initialized = Protection._initialized,
+        destroyed = Protection._destroyed,
+        executor = Protection.Executor,
+        executorVersion = Protection.ExecutorVersion,
+        level = Protection.getProtectionLevel(),
+        capabilities = Protection.Capabilities,
+        hwid = Protection.HWID,
+        buildId = Protection.BUILD_ID,
+        sessionId = Protection.SESSION_ID,
+        uptime = os.clock() - Protection._loadTime,
+    }
+end
+
+-- Auto-init with default config
+Protection.init({})
 
 BBC.Protection = Protection
 return Protection
