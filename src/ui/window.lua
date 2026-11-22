@@ -982,7 +982,9 @@ function Library:Window(opts)
     while not BBC.lucide and not BBC.iconsGaveUp and os.clock() - t0 < 25 do task.wait(0.1) end
     if not BBC.lucide then
         BBC.iconsGaveUp = true
-        for _, rec in ipairs(BBC.allIcons) do BBC.showGlyph(rec) end
+        if type(BBC.allIcons) == "table" and type(BBC.showGlyph) == "function" then
+            for _, rec in ipairs(BBC.allIcons) do BBC.showGlyph(rec) end
+        end
     end
     self._key = parseKey(opts.Keybind or "RightShift")
     self:_connect(UserInputService.InputBegan, function(input, processed)

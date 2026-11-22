@@ -59,6 +59,9 @@ local function __module(name, loader)
         warn(string.format("[BBC] falha ao carregar o módulo '%s': %s", name, tostring(result)))
         return nil
     end
+    if type(result) ~= "table" and result ~= nil then
+        warn(string.format("[BBC] módulo '%s' retornou tipo inesperado: %s", name, type(result)))
+    end
     BBC.Modules[name] = result
     return result
 end

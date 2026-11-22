@@ -22,6 +22,9 @@ local function __module(name, loader)
         warn(string.format("[BBC] falha ao carregar o módulo '%s': %s", name, tostring(result)))
         return nil
     end
+    if type(result) ~= "table" and result ~= nil then
+        warn(string.format("[BBC] módulo '%s' retornou tipo inesperado: %s", name, type(result)))
+    end
     BBC.Modules[name] = result
     return result
 end
@@ -401,11 +404,17 @@ task.spawn(function()
     end)
     if ok and type(result) == "table" then
         lucide = result
-        for _, rec in ipairs(allIcons) do if rec.img.Parent then applyIconNow(rec) end end
+        BBC.lucide = lucide
+        if type(allIcons) == "table" then
+            for _, rec in ipairs(allIcons) do if rec.img and rec.img.Parent then applyIconNow(rec) end end
+        end
     else
         warn("[BBC] ícones indisponíveis, usando símbolos: " .. tostring(result))
         iconsGaveUp = true
-        for _, rec in ipairs(allIcons) do showGlyph(rec) end
+        BBC.iconsGaveUp = true
+        if type(allIcons) == "table" and type(showGlyph) == "function" then
+            for _, rec in ipairs(allIcons) do showGlyph(rec) end
+        end
     end
 end)
 
@@ -545,6 +554,13 @@ end
 function Utils.init()
     -- placeholder para inicializações futuras
 end
+
+-- Expose icon system to BBC for cross-module access
+BBC.lucide = lucide
+BBC.iconsGaveUp = iconsGaveUp
+BBC.allIcons = allIcons
+BBC.showGlyph = showGlyph
+BBC.applyIconNow = applyIconNow
 
 BBC.Utils = Utils
 return Utils
@@ -3866,7 +3882,9 @@ function Library:Window(opts)
     while not BBC.lucide and not BBC.iconsGaveUp and os.clock() - t0 < 25 do task.wait(0.1) end
     if not BBC.lucide then
         BBC.iconsGaveUp = true
-        for _, rec in ipairs(BBC.allIcons) do BBC.showGlyph(rec) end
+        if type(BBC.allIcons) == "table" and type(BBC.showGlyph) == "function" then
+            for _, rec in ipairs(BBC.allIcons) do BBC.showGlyph(rec) end
+        end
     end
     self._key = parseKey(opts.Keybind or "RightShift")
     self:_connect(UserInputService.InputBegan, function(input, processed)
@@ -5310,13 +5328,22 @@ __module("main", function(BBC)
     features e aba de configurações.
 ]]
 
-local Library = BBC.Library
-local Utils = BBC.Utils
-local Security = BBC.Security
-local UI = BBC.UI
-local Controls = UI.Controls
+-- Safe module access with fallbacks
+local Library = BBC.Library or {}
+local Utils = BBC.Utils or {}
+local Security = BBC.Security or { init = function() end }
+local UI = BBC.UI or { Controls = { T = function() end, S = function() end } }
+local Controls = UI.Controls or { T = function() end, S = function() end }
 local T = Controls.T
 local S = Controls.S
+
+-- Verify critical dependencies
+if not Library.Library then
+    warn("[BBC] Library not loaded, some features may not work")
+end
+if not Utils.create then
+    warn("[BBC] Utils not loaded, UI elements may not render")
+end
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")

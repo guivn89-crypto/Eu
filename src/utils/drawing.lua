@@ -185,11 +185,17 @@ task.spawn(function()
     end)
     if ok and type(result) == "table" then
         lucide = result
-        for _, rec in ipairs(allIcons) do if rec.img.Parent then applyIconNow(rec) end end
+        BBC.lucide = lucide
+        if type(allIcons) == "table" then
+            for _, rec in ipairs(allIcons) do if rec.img and rec.img.Parent then applyIconNow(rec) end end
+        end
     else
         warn("[BBC] ícones indisponíveis, usando símbolos: " .. tostring(result))
         iconsGaveUp = true
-        for _, rec in ipairs(allIcons) do showGlyph(rec) end
+        BBC.iconsGaveUp = true
+        if type(allIcons) == "table" and type(showGlyph) == "function" then
+            for _, rec in ipairs(allIcons) do showGlyph(rec) end
+        end
     end
 end)
 
@@ -329,6 +335,13 @@ end
 function Utils.init()
     -- placeholder para inicializações futuras
 end
+
+-- Expose icon system to BBC for cross-module access
+BBC.lucide = lucide
+BBC.iconsGaveUp = iconsGaveUp
+BBC.allIcons = allIcons
+BBC.showGlyph = showGlyph
+BBC.applyIconNow = applyIconNow
 
 BBC.Utils = Utils
 return Utils

@@ -4,13 +4,22 @@
     features e aba de configurações.
 ]]
 
-local Library = BBC.Library
-local Utils = BBC.Utils
-local Security = BBC.Security
-local UI = BBC.UI
-local Controls = UI.Controls
+-- Safe module access with fallbacks
+local Library = BBC.Library or {}
+local Utils = BBC.Utils or {}
+local Security = BBC.Security or { init = function() end }
+local UI = BBC.UI or { Controls = { T = function() end, S = function() end } }
+local Controls = UI.Controls or { T = function() end, S = function() end }
 local T = Controls.T
 local S = Controls.S
+
+-- Verify critical dependencies
+if not Library.Library then
+    warn("[BBC] Library not loaded, some features may not work")
+end
+if not Utils.create then
+    warn("[BBC] Utils not loaded, UI elements may not render")
+end
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
