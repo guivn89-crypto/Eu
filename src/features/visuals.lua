@@ -12,6 +12,7 @@ local S = Controls.S
 
 local Library = BBC.Library
 local Utils = BBC.Utils
+local UserInputService = game:GetService("UserInputService")
 
 -- Defensive: Ensure Library.Fonts exists before any UI code accesses it
 local InitUtils = BBC.Modules["utils.init"]
@@ -38,6 +39,13 @@ local function SetupCharacterPreview(previewContainer)
     local BOX_STROKE_COLOR = Color3.fromRGB(255, 140, 0)
     local SKELETON_COLOR = Color3.fromRGB(255, 255, 255)
     local SKELETON_THICKNESS = 1.5
+    local HEALTH_BAR_WIDTH = 4
+    local HEALTH_BAR_COLOR = Color3.fromRGB(45, 205, 190)
+    local HEALTH_BAR_BG = Color3.fromRGB(0, 0, 0)
+    local KDR_COLOR = Color3.fromRGB(255, 200, 90)
+    local REPORTS_COLOR = Color3.fromRGB(255, 140, 90)
+    local TRACER_COLOR = Color3.fromRGB(255, 255, 255)
+    local ARROW_COLOR = Color3.fromRGB(255, 90, 90)
 
     -- 1. Character Holder (centralizado no container)
     local holder = create("Frame", {
@@ -66,6 +74,23 @@ local function SetupCharacterPreview(previewContainer)
 
         local partStroke = stroke(part, "Accent", 0, STROKE_THICKNESS)
         partStroke.Color = STROKE_COLOR
+
+        -- Add BBC HUB logo on Torso
+        if name == "Torso" then
+            local logoAssetId = BBC.Config and BBC.Config.LogoAssetId or "rbxassetid://123456789"
+            local logo = create("ImageLabel", {
+                Name = "BBCLogo",
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(0.6, 0.6),
+                Position = UDim2.fromScale(0.5, 0.5),
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                Image = logoAssetId,
+                ImageColor3 = Color3.fromRGB(255, 255, 255),
+                ImageTransparency = 0.3,
+                ScaleType = Enum.ScaleType.Fit,
+                ZIndex = 3,
+            }, part)
+        end
 
         chamsParts[name] = part
         return part
@@ -142,6 +167,91 @@ local function SetupCharacterPreview(previewContainer)
     end
     buildSkeleton()
 
+    -- Health Bar (left side of box)
+    local healthBarBg = create("Frame", {
+        Name = "HealthBarBg",
+        BackgroundColor3 = HEALTH_BAR_BG,
+        BackgroundTransparency = 0.35,
+        BorderSizePixel = 0,
+        Size = UDim2.fromOffset(HEALTH_BAR_WIDTH, 0), -- height will be set
+        Position = UDim2.fromScale(0, 0),
+        AnchorPoint = Vector2.new(1, 0),
+        ZIndex = 3,
+        Visible = false,
+    }, holder)
+
+    local healthBarFill = create("Frame", {
+        Name = "HealthBarFill",
+        BackgroundColor3 = HEALTH_BAR_COLOR,
+        BorderSizePixel = 0,
+        AnchorPoint = Vector2.new(0, 1),
+        Position = UDim2.fromScale(0, 1),
+        Size = UDim2.fromScale(1, 1),
+        ZIndex = 4,
+    }, healthBarBg)
+
+    -- K/D Label
+    local kdrLabel = create("TextLabel", {
+        Name = "KDRLabel",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 14),
+        Position = UDim2.fromScale(1.05, 0.35),
+        AnchorPoint = Vector2.new(0, 0.5),
+        Text = "K/D: 2.50",
+        TextColor3 = KDR_COLOR,
+        TextSize = 10,
+        FontFace = Library.Fonts.Medium,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 5,
+        Visible = false,
+    }, holder)
+    local kdrStroke = stroke(kdrLabel, "Stroke", 0, 1)
+    kdrStroke.Color = Color3.fromRGB(0, 0, 0)
+
+    -- Reports Label
+    local reportsLabel = create("TextLabel", {
+        Name = "ReportsLabel",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 14),
+        Position = UDim2.fromScale(1.05, 0.45),
+        AnchorPoint = Vector2.new(0, 0.5),
+        Text = "Reports: 0",
+        TextColor3 = REPORTS_COLOR,
+        TextSize = 10,
+        FontFace = Library.Fonts.Medium,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 5,
+        Visible = false,
+    }, holder)
+    local reportsStroke = stroke(reportsLabel, "Stroke", 0, 1)
+    reportsStroke.Color = Color3.fromRGB(0, 0, 0)
+
+    -- Tracer Line (from bottom center to box center)
+    local tracerLine = create("Frame", {
+        Name = "TracerLine",
+        BackgroundColor3 = TRACER_COLOR,
+        BorderSizePixel = 0,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        ZIndex = 3,
+        Visible = false,
+    }, holder)
+
+    -- Arrow (above head for off-screen indicator)
+    local arrowLabel = create("TextLabel", {
+        Name = "ArrowLabel",
+        BackgroundTransparency = 1,
+        Text = "▲",
+        FontFace = Library.Fonts.Bold,
+        TextColor3 = ARROW_COLOR,
+        TextSize = 16,
+        TextStrokeTransparency = 0.4,
+        TextStrokeColor3 = Color3.new(0, 0, 0),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Size = UDim2.fromOffset(20, 20),
+        ZIndex = 5,
+        Visible = false,
+    }, holder)
+
     -- Labels
     local nameLabel = create("TextLabel", {
         Name = "NameLabel",
@@ -184,7 +294,15 @@ local function SetupCharacterPreview(previewContainer)
         skeleton = true,
         name = true,
         distance = true,
+        healthbar = true,
+        health = true,
+        kdr = false,
+        reports = false,
+        tracers = false,
+        arrows = false,
         color = CHAMS_COLOR,
+        previewHealth = 100,
+        previewDistance = "1175m",
     }
 
     local function applyColor(c)
@@ -199,6 +317,32 @@ local function SetupCharacterPreview(previewContainer)
             math.floor(c.G * 255 * 0.85),
             math.floor(c.B * 255 * 0.85)
         )
+        healthBarFill.BackgroundColor3 = c
+        tracerLine.BackgroundColor3 = c
+        arrowLabel.TextColor3 = c
+    end
+
+    local function updateHealthBar()
+        local ratio = math.clamp(state.previewHealth / 100, 0, 1)
+        healthBarBg.Size = UDim2.fromOffset(HEALTH_BAR_WIDTH, holder.AbsoluteSize.Y)
+        healthBarBg.Position = UDim2.fromScale(0, 0)
+        healthBarFill.Size = UDim2.fromScale(1, ratio)
+    end
+
+    local function updateTracer()
+        local boxCenter = Vector2.new(0.5, 0.5)
+        local screenBottom = Vector2.new(0.5, 1.1)
+        local dx = (boxCenter.X - screenBottom.X) * holder.AbsoluteSize.X
+        local dy = (boxCenter.Y - screenBottom.Y) * holder.AbsoluteSize.Y
+        local dist = math.sqrt(dx * dx + dy * dy)
+        local angle = math.atan2(dy, dx)
+        tracerLine.Size = UDim2.fromOffset(dist, 1.5)
+        tracerLine.Position = UDim2.fromScale(0.5, 0.55)
+        tracerLine.Rotation = math.deg(angle)
+    end
+
+    local function updateArrow()
+        arrowLabel.Position = UDim2.fromScale(0.5, -0.15)
     end
 
     local controller = {}
@@ -232,9 +376,133 @@ local function SetupCharacterPreview(previewContainer)
         distanceLabel.Visible = enabled
     end
 
+    function controller.SetHealthBar(enabled)
+        state.healthbar = enabled
+        healthBarBg.Visible = enabled
+        if enabled then updateHealthBar() end
+    end
+
+    function controller.SetHealth(enabled)
+        state.health = enabled
+        -- Health numeric is shown in health bar fill, no separate label needed in preview
+    end
+
+    function controller.SetKDR(enabled)
+        state.kdr = enabled
+        kdrLabel.Visible = enabled
+    end
+
+    function controller.SetReports(enabled)
+        state.reports = enabled
+        reportsLabel.Visible = enabled
+    end
+
+    function controller.SetTracers(enabled)
+        state.tracers = enabled
+        tracerLine.Visible = enabled
+        if enabled then updateTracer() end
+    end
+
+    function controller.SetArrows(enabled)
+        state.arrows = enabled
+        arrowLabel.Visible = enabled
+        if enabled then updateArrow() end
+    end
+
     function controller.SetColor(c)
         state.color = c
         applyColor(c)
+    end
+
+    function controller.SetPreviewHealth(hp)
+        state.previewHealth = math.clamp(hp, 0, 100)
+        if state.healthbar then updateHealthBar() end
+    end
+
+    function controller.SetPreviewDistance(dist)
+        state.previewDistance = dist
+        distanceLabel.Text = dist
+    end
+
+    function controller.SetPreviewKDR(kdr)
+        kdrLabel.Text = "K/D: " .. tostring(kdr)
+    end
+
+    function controller.SetPreviewReports(reports)
+        reportsLabel.Text = "Reports: " .. tostring(reports)
+    end
+
+    -- Draggable repositioning for preview elements
+    local dragElements = {
+        nameLabel = nameLabel,
+        distanceLabel = distanceLabel,
+        healthBarBg = healthBarBg,
+        boundingBox = boundingBox,
+        arrowLabel = arrowLabel,
+        tracerLine = tracerLine,
+        kdrLabel = kdrLabel,
+        reportsLabel = reportsLabel,
+    }
+    local dragOffsets = {}
+
+    local function makeDraggable(element, elementName)
+        local dragging = false
+        local dragStart = nil
+        local startPos = nil
+
+        local function updatePosition(input)
+            local delta = input.Position - dragStart
+            local newPos = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+            element.Position = newPos
+            dragOffsets[elementName] = { X = newPos.X.Offset, Y = newPos.Y.Offset }
+        end
+
+        element.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                dragStart = input.Position
+                startPos = element.Position
+                element.ZIndex = 10 -- Bring to front while dragging
+            end
+        end)
+
+        element.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                updatePosition(input)
+            end
+        end)
+
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                if dragging then
+                    dragging = false
+                    element.ZIndex = elementName == "boundingBox" and 3 or elementName == "healthBarBg" and 3 or 5
+                end
+            end
+        end)
+    end
+
+    for name, elem in pairs(dragElements) do
+        makeDraggable(elem, name)
+    end
+
+    function controller.GetDragOffsets()
+        return dragOffsets
+    end
+
+    function controller.SetDragOffsets(offsets)
+        dragOffsets = offsets or {}
+        for name, offset in pairs(dragOffsets) do
+            local elem = dragElements[name]
+            if elem and offset then
+                elem.Position = UDim2.new(elem.Position.X.Scale, offset.X, elem.Position.Y.Scale, offset.Y)
+            end
+        end
     end
 
     -- Initialize
@@ -243,6 +511,14 @@ local function SetupCharacterPreview(previewContainer)
     controller.SetSkeleton(state.skeleton)
     controller.SetName(state.name)
     controller.SetDistance(state.distance)
+    controller.SetHealthBar(state.healthbar)
+    controller.SetHealth(state.health)
+    controller.SetKDR(state.kdr)
+    controller.SetReports(state.reports)
+    controller.SetTracers(state.tracers)
+    controller.SetArrows(state.arrows)
+    controller.SetPreviewHealth(state.previewHealth)
+    controller.SetPreviewDistance(state.previewDistance)
 
     return controller
 end
@@ -321,13 +597,93 @@ local function buildEspPanel(kind)
         local pedInnerStroke = stroke(pedInner, "Accent", 0.5, 1)
 
         -- ============================================================
+        --  Quick-Toggle Button Grid at Preview Bottom
+        -- ============================================================
+        local toggleButtonsFrame = create("ScrollingFrame", {
+            Name = "QuickToggles",
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            AnchorPoint = Vector2.new(0.5, 1),
+            Position = UDim2.fromScale(0.5, 1),
+            Size = UDim2.new(1, -16, 0, 38),
+            CanvasSize = UDim2.new(0, 0, 0, 0),
+            AutomaticCanvasSize = Enum.AutomaticSize.X,
+            ScrollBarThickness = 3,
+            ScrollingDirection = Enum.ScrollingDirection.X,
+            ClipsDescendants = false,
+        }, previewContainer)
+        local toggleList = create("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            HorizontalAlignment = Enum.HorizontalAlignment.Center,
+            Padding = UDim.new(0, 6),
+            SortOrder = Enum.SortOrder.LayoutOrder,
+        }, toggleButtonsFrame)
+        create("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 4) }, toggleButtonsFrame)
+
+        local quickToggles = {
+            { key = "highlight", label = "Destaque", setter = function(v) previewController.SetChams(v) end },
+            { key = "box", label = "Caixa", setter = function(v) previewController.SetBox(v) end },
+            { key = "name", label = "Nome", setter = function(v) previewController.SetName(v) end },
+            { key = "healthbar", label = "Barra de vida", setter = function(v) previewController.SetHealthBar(v) end },
+            { key = "health", label = "Vida", setter = function(v) previewController.SetHealth(v) end },
+            { key = "distance", label = "Distância", setter = function(v) previewController.SetDistance(v) end },
+            { key = "kdr", label = "K/D", setter = function(v) previewController.SetKDR(v) end },
+            { key = "reports", label = "Denúncias", setter = function(v) previewController.SetReports(v) end },
+            { key = "tracers", label = "Linhas até alvos", setter = function(v) previewController.SetTracers(v) end },
+            { key = "arrows", label = "Setas", setter = function(v) previewController.SetArrows(v) end },
+            { key = "skeleton", label = "Esqueleto", setter = function(v) previewController.SetSkeleton(v) end },
+        }
+
+        for i, tgl in ipairs(quickToggles) do
+            local isEnabled = S[tgl.key] and S[tgl.key].on or false
+            local btn = create("TextButton", {
+                Name = "Toggle_" .. tgl.key,
+                BackgroundColor3 = isEnabled and Library.Theme.Accent or Library.Theme.Surface2,
+                BorderSizePixel = 0,
+                Size = UDim2.fromOffset(0, 30),
+                AutomaticSize = Enum.AutomaticSize.X,
+                Text = tgl.label,
+                TextColor3 = isEnabled and Color3.new(1,1,1) or Library.Theme.Text,
+                TextSize = 10,
+                FontFace = Library.Fonts.Medium,
+                TextXAlignment = Enum.TextXAlignment.Center,
+                TextYAlignment = Enum.TextYAlignment.Center,
+                TextWrapped = false,
+                TextTruncate = Enum.TextTruncate.None,
+                ClipsDescendants = false,
+                LayoutOrder = i,
+            }, toggleButtonsFrame)
+            corner(btn, 4)
+            local btnStroke = stroke(btn, "Stroke", 0, 1)
+            btnStroke.Color = isEnabled and Library.Theme.Accent or Library.Theme.Stroke
+
+            local padding = create("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, btn)
+
+            btn.MouseButton1Click:Connect(function()
+                isEnabled = not isEnabled
+                if S[tgl.key] then S[tgl.key].on = isEnabled end
+                tgl.setter(isEnabled)
+                btn.BackgroundColor3 = isEnabled and Library.Theme.Accent or Library.Theme.Surface2
+                btn.TextColor3 = isEnabled and Color3.new(1,1,1) or Library.Theme.Text
+                btnStroke.Color = isEnabled and Library.Theme.Accent or Library.Theme.Stroke
+                -- Sync with right panel toggle (find and update)
+                -- The right panel toggles are created by add() function, they'll update on next render
+            end)
+
+            -- Bind theme colors
+            bind(btn, "BackgroundColor3", isEnabled and "Accent" or "Surface2")
+            bind(btn, "TextColor3", isEnabled and "Text" or "Text")
+            bind(btnStroke, "Color", isEnabled and "Accent" or "Stroke")
+        end
+
+        -- ============================================================
         --  Right Side Settings (bind to preview controller)
         -- ============================================================
         local fold = R:Foldout({ Name = "Configurações gerais", Build = function(p)
             p:Slider({ Name = "Distância máx.", Min = 100, Max = 3000, Default = 1000, Suffix = "m", Step = 50, Callback = function(v) S.maxDist = v end })
             p:Slider({ Name = "Tamanho do texto", Min = 9, Max = 16, Default = 10, Callback = function(v) S.textSize = v end })
-            p:Slider({ Name = "Distância da prévia", Min = 10, Max = 2000, Default = 120, Suffix = "m", Step = 10, Callback = function(v) S.prevDist = v end })
-            p:Slider({ Name = "Vida da prévia", Min = 0, Max = 100, Default = 100, Callback = function(v) S.prevHp = v end })
+            p:Slider({ Name = "Distância da prévia", Min = 10, Max = 2000, Default = 120, Suffix = "m", Step = 10, Callback = function(v) S.prevDist = v; previewController.SetPreviewDistance(v .. "m") end })
+            p:Slider({ Name = "Vida da prévia", Min = 0, Max = 100, Default = 100, Callback = function(v) S.prevHp = v; previewController.SetPreviewHealth(v) end })
             p:Toggle({ Name = "Só detalhes de perto", Default = true, Tooltip = "Longe, mostra só um ponto e a distância. Perto, mostra tudo.", Callback = function(v) S.lod.on = v end })
             p:Slider({ Name = "Detalhes até", Min = 20, Max = 1000, Default = 150, Suffix = "m", Step = 10, Callback = function(v) S.lod.near = v end })
             p:Toggle({ Name = "Destacar mais próximo", Default = false, Tooltip = "O alvo mais perto de você ganha outra cor e uma seta em cima.",
@@ -344,13 +700,19 @@ local function buildEspPanel(kind)
                 elseif key == "skeleton" then previewController.SetSkeleton(v)
                 elseif key == "name" then previewController.SetName(v)
                 elseif key == "distance" then previewController.SetDistance(v)
+                elseif key == "healthbar" then previewController.SetHealthBar(v)
+                elseif key == "health" then previewController.SetHealth(v)
+                elseif key == "kdr" then previewController.SetKDR(v)
+                elseif key == "reports" then previewController.SetReports(v)
+                elseif key == "tracers" then previewController.SetTracers(v)
+                elseif key == "arrows" then previewController.SetArrows(v)
                 end
             end,
             Settings = function(p)
                 if S[key] then
                     p:ColorPicker({ Name = "Cor", Default = S[key].color, Callback = function(c)
                         if S[key] then S[key].color = c end
-                        if key == "highlight" or key == "box" or key == "skeleton" then
+                        if key == "highlight" or key == "box" or key == "skeleton" or key == "tracers" or key == "arrows" then
                             previewController.SetColor(c)
                         end
                     end })

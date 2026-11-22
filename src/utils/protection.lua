@@ -1411,12 +1411,6 @@ function Protection.init(config)
     Protection._initialized = true
     secureLog(1, "Protection layer fully initialized")
 
-    -- Auto-start ESP engine if BBC.Library is already available
-    if BBC.Library then
-        Protection.startESPEngine()
-        Protection.registerESPFeatures()
-    end
-
     return {
         executor = Protection.Executor,
         executorVersion = Protection.ExecutorVersion,
@@ -1567,6 +1561,10 @@ function Protection.startESPEngine()
         d.arrow = mk("TextLabel", { BackgroundTransparency = 1, Text = "▲", FontFace = FONT, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(30, 30), Visible = false, TextStrokeTransparency = 0.4 }, r)
         d.dot = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(8, 8), BorderSizePixel = 0, Visible = false }, r)
         mk("UICorner", { CornerRadius = UDim.new(1, 0) }, d.dot)
+        d.kdr = txt(r, Vector2.new(1, 0.5))
+        d.kdr.Text = "K/D: 0.00"
+        d.reports = txt(r, Vector2.new(1, 0.5))
+        d.reports.Text = "Reports: 0"
         d.hl = mk("Highlight", { DepthMode = Enum.HighlightDepthMode.AlwaysOnTop, Enabled = false }, holder)
         return d
     end
@@ -1675,6 +1673,49 @@ function Protection.startESPEngine()
                 d.dist.Visible = true; d.dist.Text = distText; d.dist.TextSize = math.max(ts-1,8); d.dist.TextColor3 = S.distance.color
                 d.dist.Position = UDim2.fromOffset(cx, bottom + 2)
             end
+            -- K/D display
+            if S.kdr and S.kdr.on then
+                local kdrValue = "0.00"
+                local pl = Players:GetPlayerFromCharacter(t.model)
+                if pl then
+                    local leaderstats = pl:FindFirstChild("leaderstats")
+                    if leaderstats then
+                        local kills = leaderstats:FindFirstChild("Kills") or leaderstats:FindFirstChild("K")
+                        local deaths = leaderstats:FindFirstChild("Deaths") or leaderstats:FindFirstChild("D")
+                        if kills and deaths then
+                            local k = kills.Value or 0
+                            local d = deaths.Value or 0
+                            if d > 0 then kdrValue = string.format("%.2f", k/d) else kdrValue = tostring(k) end
+                        end
+                    end
+                end
+                d.kdr.Visible = true
+                d.kdr.Text = "K/D: " .. kdrValue
+                d.kdr.TextSize = math.max(ts-1, 8)
+                d.kdr.TextColor3 = S.kdr.color
+                d.kdr.Position = UDim2.fromOffset(left + wid + 5, (top+bottom)/2 - 10)
+            else
+                d.kdr.Visible = false
+            end
+            -- Reports display
+            if S.reports and S.reports.on then
+                local reportsValue = "0"
+                local pl = Players:GetPlayerFromCharacter(t.model)
+                if pl then
+                    local leaderstats = pl:FindFirstChild("leaderstats")
+                    if leaderstats then
+                        local reports = leaderstats:FindFirstChild("Reports") or leaderstats:FindFirstChild("Report")
+                        if reports then reportsValue = tostring(reports.Value or 0) end
+                    end
+                end
+                d.reports.Visible = true
+                d.reports.Text = "Reports: " .. reportsValue
+                d.reports.TextSize = math.max(ts-1, 8)
+                d.reports.TextColor3 = S.reports.color
+                d.reports.Position = UDim2.fromOffset(left + wid + 5, (top+bottom)/2 + 10)
+            else
+                d.reports.Visible = false
+            end
             if S.skeleton.on then
                 local list = t.model:FindFirstChild("UpperTorso") and R15 or R6
                 d.skelOn = true
@@ -1757,6 +1798,44 @@ function Protection.startESPEngine()
                 if not model.Parent then d.root:Destroy(); d.hl:Destroy(); P[model] = nil end
             end
         end
+    end
+
+    -- Player cleanup connections
+    local LocalPlayer = Players.LocalPlayer
+
+    local function cleanupCharacter(char)
+        for kind, P in pairs(pool) do
+            local d = P[char]
+            if d then
+                d.root:Destroy()
+                d.hl:Destroy()
+                P[char] = nil
+            end
+        end
+    end
+
+    local function cleanupPlayer(pl)
+        cleanupCharacter(pl.Character)
+    end
+
+    Players.PlayerRemoving:Connect(cleanupPlayer)
+
+    -- Handle CharacterRemoving for all existing players AND future players
+    local function hookCharacterRemoving(pl)
+        pl.CharacterRemoving:Connect(cleanupCharacter)
+    end
+
+    -- Hook existing players
+    for _, pl in ipairs(Players:GetPlayers()) do
+        hookCharacterRemoving(pl)
+    end
+
+    -- Hook future players
+    Players.PlayerAdded:Connect(hookCharacterRemoving)
+
+    -- Also handle LocalPlayer explicitly (in case not in GetPlayers())
+    if LocalPlayer then
+        hookCharacterRemoving(LocalPlayer)
     end
     
     local errCount, stopped = 0, false

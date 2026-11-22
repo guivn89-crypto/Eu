@@ -549,8 +549,7 @@ pcall(function() Window:SetToggleButton(true) end)
 
 -- Initialize Protection layer after Library is fully available
 Protection.init({})
-Protection.registerESPFeatures()
-Protection.startESPEngine()
+-- ESP features registered and engine started inside Protection.init()
 
 -- Tradução automática
 do
