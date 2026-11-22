@@ -5000,21 +5000,23 @@ local function SetupCharacterPreview(previewContainer)
         local partStroke = stroke(part, "Accent", 0, STROKE_THICKNESS)
         partStroke.Color = STROKE_COLOR
 
-        -- Add BBC HUB logo on Torso
+        -- Add BBC HUB logo on Torso (only if configured)
         if name == "Torso" then
-            local logoAssetId = BBC.Config and BBC.Config.LogoAssetId or "rbxassetid://123456789"
-            local logo = create("ImageLabel", {
-                Name = "BBCLogo",
-                BackgroundTransparency = 1,
-                Size = UDim2.fromScale(0.6, 0.6),
-                Position = UDim2.fromScale(0.5, 0.5),
-                AnchorPoint = Vector2.new(0.5, 0.5),
-                Image = logoAssetId,
-                ImageColor3 = Color3.fromRGB(255, 255, 255),
-                ImageTransparency = 0.3,
-                ScaleType = Enum.ScaleType.Fit,
-                ZIndex = 3,
-            }, part)
+            local logoAssetId = BBC.Config and BBC.Config.LogoAssetId
+            if logoAssetId and type(logoAssetId) == "string" and #logoAssetId > 0 then
+                local logo = create("ImageLabel", {
+                    Name = "BBCLogo",
+                    BackgroundTransparency = 1,
+                    Size = UDim2.fromScale(0.6, 0.6),
+                    Position = UDim2.fromScale(0.5, 0.5),
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    Image = logoAssetId,
+                    ImageColor3 = Color3.fromRGB(255, 255, 255),
+                    ImageTransparency = 0.3,
+                    ScaleType = Enum.ScaleType.Fit,
+                    ZIndex = 3,
+                }, part)
+            end
         end
 
         chamsParts[name] = part
