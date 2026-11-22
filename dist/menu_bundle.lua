@@ -871,6 +871,32 @@ function Protection.getAPI()
     return api
 end
 
+function Protection.getProtectionLevel()
+    local caps = Protection.getCapabilities()
+    local score = 0
+    local total = 0
+
+    for _, has in pairs(caps.flat) do
+        total = total + 1
+        if has then score = score + 1 end
+    end
+
+    local pct = (total > 0) and (score / total) or 0
+    local level, desc
+
+    if pct >= 0.90 then
+        level, desc = 4, "Máximo (Full UNC + Crypto + Thread Control)"
+    elseif pct >= 0.75 then
+        level, desc = 3, "Avançado (UNC Parcial + Filesystem + Network)"
+    elseif pct >= 0.55 then
+        level, desc = 2, "Intermediário (Basic UNC + Filesystem)"
+    else
+        level, desc = 1, "Básico (Apenas Roblox Vanilla APIs)"
+    end
+
+    return level, desc, pct
+end
+
 -- ============================================================
 -- 3. INTEGRITY & ANTI-TAMPER (Advanced)
 -- ============================================================
@@ -2934,6 +2960,7 @@ BBC.SETTINGS_ICON = BBC.SETTINGS_ICON or {}
 BBC.MODALS = BBC.MODALS or {}
 BBC.TIPS = BBC.TIPS or {}
 BBC.buildSettings = BBC.buildSettings
+BBC.register = register
 
 return { Container = Container, Controls = Controls }
 
@@ -3072,7 +3099,7 @@ function Tab:Groupbox(opts)
         end
         function cbObj:Get() return on end
         cb.MouseButton1Click:Connect(function() cbObj:Set(not on) end)
-        register(self, tostring(opts.Name) .. "#ativo", function() return on end, function(v) cbObj:Set(v) end)
+        BBC.register(self, tostring(opts.Name) .. "#ativo", function() return on end, function(v) cbObj:Set(v) end)
         if on then safeCall(opts.Callback, true) end
     end
     local ln = create("Frame", { Size = UDim2.new(1, -16, 0, 1), Position = UDim2.new(0, 8, 1, -1), BorderSizePixel = 0, BackgroundTransparency = 0.4 }, head)

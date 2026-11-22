@@ -744,5 +744,6 @@ BBC.SETTINGS_ICON = BBC.SETTINGS_ICON or {}
 BBC.MODALS = BBC.MODALS or {}
 BBC.TIPS = BBC.TIPS or {}
 BBC.buildSettings = BBC.buildSettings
+BBC.register = register
 
 return { Container = Container, Controls = Controls }

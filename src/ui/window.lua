@@ -127,7 +127,7 @@ function Tab:Groupbox(opts)
         end
         function cbObj:Get() return on end
         cb.MouseButton1Click:Connect(function() cbObj:Set(not on) end)
-        register(self, tostring(opts.Name) .. "#ativo", function() return on end, function(v) cbObj:Set(v) end)
+        BBC.register(self, tostring(opts.Name) .. "#ativo", function() return on end, function(v) cbObj:Set(v) end)
         if on then safeCall(opts.Callback, true) end
     end
     local ln = create("Frame", { Size = UDim2.new(1, -16, 0, 1), Position = UDim2.new(0, 8, 1, -1), BorderSizePixel = 0, BackgroundTransparency = 0.4 }, head)
