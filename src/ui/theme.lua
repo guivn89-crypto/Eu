@@ -27,6 +27,46 @@ Library._kbListeners = {}
 Library._toggleBinds = {}
 Library.Tr = function(t) return t end
 
+-- Initialize feature/option tables early (before features modules load)
+Library.FO = {}
+Library.Features = {}
+Library.FS = {}
+Library.SV = {}
+Library.ESP = {}
+Library.LootCfg = {}
+Library.RadarCfg = {}
+Library.keys = { menu = "RightShift", cursor = "LeftAlt", zoom = "N" }
+
+-- Expose on BBC table for cross-module access
+BBC.FO = Library.FO
+BBC.Features = Library.Features
+BBC.FS = Library.FS
+BBC.SV = Library.SV
+BBC.ESP = Library.ESP
+BBC.LootCfg = Library.LootCfg
+BBC.RadarCfg = Library.RadarCfg
+BBC.keys = Library.keys
+
+-- Expose methods on BBC table
+BBC.TerrainColor = Library.TerrainColor
+BBC.Notify = Library.Notify
+
+-- Terrain color helper
+Library.TerrainColor = function(mat, c)
+    pcall(function()
+        local Workspace = game:GetService("Workspace")
+        if mat == "Water" then Workspace.Terrain.WaterColor = c else Workspace.Terrain:SetMaterialColor(mat, c) end
+    end)
+end
+
+-- Notify wrapper (uses Utils.notify internally)
+Library.Notify = function(opts)
+    local Utils = BBC.Utils
+    if Utils and Utils.notify then return Utils.notify(opts) end
+    -- Fallback if Utils not ready
+    warn("[BBC] Notify called but Utils not ready: " .. tostring(opts and opts.Content or opts))
+end
+
 function Library:_kbChanged()
     for _, fn in ipairs(Library._kbListeners) do pcall(fn) end
 end

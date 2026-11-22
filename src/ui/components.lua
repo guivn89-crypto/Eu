@@ -689,17 +689,22 @@ end
 
 -- ---------- Label ----------
 function Container:Label(opts)
-    opts = type(opts) == "table" and opts or { Text = opts }
-    local outer = newOuter(self, opts.Text)
+    local text = ""
+    if type(opts) == "table" then
+        text = tostring(opts.Text or "")
+    elseif opts ~= nil then
+        text = tostring(opts)
+    end
+    local outer = newOuter(self, text)
     local row = create("Frame", { Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1 }, outer)
-    local l = label(row, opts.Text, 12, "Muted", false, { Position = UDim2.fromOffset(12, 0), Size = UDim2.new(1, -24, 1, 0), TextYAlignment = Enum.TextYAlignment.Center })
-    return { Frame = outer, Label = l, Set = function(_, t) l.Text = t end }
+    local l = label(row, text, 12, "Muted", false, { Position = UDim2.fromOffset(12, 0), Size = UDim2.new(1, -24, 1, 0), TextYAlignment = Enum.TextYAlignment.Center })
+    return { Frame = outer, Label = l, Set = function(_, t) l.Text = tostring(t or "") end }
 end
 
 function Container:Section(text)
-    local outer = newOuter(self, text)
+    local outer = newOuter(self, text or "")
     local row = create("Frame", { Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1 }, outer)
-    label(row, string.upper(text or ""), 12, "Muted", true, { Position = UDim2.fromOffset(12, 4), Size = UDim2.new(1, -24, 0, 18) })
+    label(row, string.upper(tostring(text or "")), 12, "Muted", true, { Position = UDim2.fromOffset(12, 4), Size = UDim2.new(1, -24, 0, 18) })
     return { Frame = outer }
 end
 
