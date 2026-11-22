@@ -17,6 +17,10 @@ export type ToggleOptions = {
     SettingsIcon: string?,
     Modal: (() -> ())?,
     ModalTitles: { string }?,
+    ModalHeaderExtras: {
+        leftActions: { { icon: string, callback: (() -> ())? } }?,
+        rightActions: { { icon: string, callback: (() -> ())? } }?,
+    }?,
     Prebuild: boolean?,
     Premium: boolean?,
     Warning: boolean?,
@@ -353,8 +357,8 @@ function Container:Toggle(opts)
             end
             m.Overlay.Visible = not m.Overlay.Visible
         end)
-        -- Hide the gear button - row click will open modal
-        modalBtn.Visible = false
+        -- Ícone visível na mesma posição/estilo dos rows de ajustes (Corpo/Recipiente);
+        -- o clique na linha também abre o modal.
         
         -- Make entire row click open the modal
         row.MouseButton1Click:Connect(function()

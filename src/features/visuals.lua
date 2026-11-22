@@ -53,13 +53,13 @@ local function SetupCharacterPreview(previewContainer)
     local TRACER_COLOR = Color3.fromRGB(255, 255, 255)
     local ARROW_COLOR = Color3.fromRGB(255, 90, 90)
 
-    -- 1. Character Holder (posicionado no terço superior para não sobrepor a grade 3x4)
+    -- 1. Character Holder (reduzido e centralizado no terço superior, acima da grade 3x4)
     local holder = create("Frame", {
         Name = "PreviewHolder",
         BackgroundTransparency = 1,
-        Size = UDim2.fromOffset(130, 200),
+        Size = UDim2.fromOffset(100, 108),
         AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.35),
+        Position = UDim2.fromScale(0.5, 0.3),
     }, previewContainer)
 
     -- 2. R6 Chams Silhouette
@@ -81,7 +81,7 @@ local function SetupCharacterPreview(previewContainer)
         local partStroke = stroke(part, "Accent", 0, STROKE_THICKNESS)
         partStroke.Color = STROKE_COLOR
 
-        -- Add BBC HUB logo on Torso (only if configured)
+        -- Add BBC HUB logo on Torso (asset se configurado; senão, logo em texto)
         if name == "Torso" then
             local logoAssetId = BBC.Config and BBC.Config.LogoAssetId
             if logoAssetId and type(logoAssetId) == "string" and #logoAssetId > 0 then
@@ -95,6 +95,20 @@ local function SetupCharacterPreview(previewContainer)
                     ImageColor3 = Color3.fromRGB(255, 255, 255),
                     ImageTransparency = 0.3,
                     ScaleType = Enum.ScaleType.Fit,
+                    ZIndex = 3,
+                }, part)
+            else
+                create("TextLabel", {
+                    Name = "BBCLogo",
+                    BackgroundTransparency = 1,
+                    Size = UDim2.fromScale(0.92, 0.55),
+                    Position = UDim2.fromScale(0.5, 0.5),
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    Text = "BBC HUB",
+                    TextColor3 = Color3.fromRGB(255, 255, 255),
+                    TextTransparency = 0.25,
+                    TextScaled = true,
+                    FontFace = (Library.Fonts and Library.Fonts.Bold) or Enum.Font.GothamBold,
                     ZIndex = 3,
                 }, part)
             end
@@ -127,26 +141,6 @@ local function SetupCharacterPreview(previewContainer)
     -- Skeleton Lines
     local skeletonLines = {}
 
-    local function drawLine(p1, p2)
-        local dx = p2.X - p1.X
-        local dy = p2.Y - p1.Y
-        local dist = math.sqrt(dx * dx + dy * dy)
-        local angle = math.atan2(dy, dx)
-
-        local line = create("Frame", {
-            BackgroundColor3 = SKELETON_COLOR,
-            BorderSizePixel = 0,
-            Size = UDim2.fromOffset(dist, SKELETON_THICKNESS),
-            AnchorPoint = Vector2.new(0, 0.5),
-            Position = UDim2.fromScale(p1.X, p1.Y),
-            Rotation = math.deg(angle),
-            ZIndex = 4,
-        }, holder)
-
-        skeletonLines[#skeletonLines + 1] = line
-        return line
-    end
-
     -- Joint positions (relative to holder scale 0-1)
     local joints = {
         HeadTop     = Vector2.new(0.5, 0.02),
@@ -160,24 +154,56 @@ local function SetupCharacterPreview(previewContainer)
         RightFoot   = Vector2.new(0.63, 0.98),
     }
 
+    -- Pares de juntas na ordem em que as linhas são criadas
+    local jointPairs = {
+        { joints.HeadTop, joints.Neck },
+        { joints.Neck, joints.Pelvis },
+        { joints.LeftShoulder, joints.RightShoulder },
+        { joints.LeftShoulder, joints.LeftHand },
+        { joints.RightShoulder, joints.RightHand },
+        { joints.Pelvis, joints.LeftFoot },
+        { joints.Pelvis, joints.RightFoot },
+    }
+
+    -- Comprimento/ângulo em PIXELS (antes usava a escala 0-1 e as linhas ficavam invisíveis)
+    local function lineSpec(p1, p2)
+        local abs = holder.AbsoluteSize
+        local dx = (p2.X - p1.X) * abs.X
+        local dy = (p2.Y - p1.Y) * abs.Y
+        return math.sqrt(dx * dx + dy * dy), math.deg(math.atan2(dy, dx))
+    end
+
+    local function drawLine(p1, p2)
+        local dist, angle = lineSpec(p1, p2)
+
+        local line = create("Frame", {
+            BackgroundColor3 = SKELETON_COLOR,
+            BorderSizePixel = 0,
+            Size = UDim2.fromOffset(dist, SKELETON_THICKNESS),
+            AnchorPoint = Vector2.new(0, 0.5),
+            Position = UDim2.fromScale(p1.X, p1.Y),
+            Rotation = angle,
+            ZIndex = 4,
+        }, holder)
+
+        skeletonLines[#skeletonLines + 1] = line
+        return line
+    end
+
     local function buildSkeleton()
-        drawLine(joints.HeadTop, joints.Neck)
-        drawLine(joints.Neck, joints.Pelvis)
-        drawLine(joints.LeftShoulder, joints.RightShoulder)
-        drawLine(joints.LeftShoulder, joints.LeftHand)
-        drawLine(joints.RightShoulder, joints.RightHand)
-        drawLine(joints.Pelvis, joints.LeftFoot)
-        drawLine(joints.Pelvis, joints.RightFoot)
+        for _, pair in ipairs(jointPairs) do
+            drawLine(pair[1], pair[2])
+        end
     end
     buildSkeleton()
 
-    -- Health Bar (left side of box)
+    -- Health Bar (left side of box; altura em escala para não depender de AbsoluteSize)
     local healthBarBg = create("Frame", {
         Name = "HealthBarBg",
         BackgroundColor3 = HEALTH_BAR_BG,
         BackgroundTransparency = 0.35,
         BorderSizePixel = 0,
-        Size = UDim2.fromOffset(HEALTH_BAR_WIDTH, 0),
+        Size = UDim2.new(0, HEALTH_BAR_WIDTH, 1, 0),
         Position = UDim2.fromScale(0, 0),
         AnchorPoint = Vector2.new(1, 0),
         ZIndex = 3,
@@ -194,36 +220,36 @@ local function SetupCharacterPreview(previewContainer)
         ZIndex = 4,
     }, healthBarBg)
 
-    -- K/D Label
+    -- K/D Label (ancorada à direita do holder para não vazar da prévia)
     local kdrLabel = create("TextLabel", {
         Name = "KDRLabel",
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 14),
-        Position = UDim2.fromScale(1.05, 0.35),
-        AnchorPoint = Vector2.new(0, 0.5),
+        Position = UDim2.fromScale(0.99, 0.35),
+        AnchorPoint = Vector2.new(1, 0.5),
         Text = "K/D: 2.50",
         TextColor3 = KDR_COLOR,
         TextSize = 10,
         FontFace = Library.Fonts.Medium,
-        TextXAlignment = Enum.TextXAlignment.Left,
+        TextXAlignment = Enum.TextXAlignment.Right,
         ZIndex = 5,
         Visible = false,
     }, holder)
     local kdrStroke = stroke(kdrLabel, "Stroke", 0, 1)
     kdrStroke.Color = Color3.fromRGB(0, 0, 0)
 
-    -- Reports Label
+    -- Reports Label (ancorada à direita do holder para não vazar da prévia)
     local reportsLabel = create("TextLabel", {
         Name = "ReportsLabel",
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 14),
-        Position = UDim2.fromScale(1.05, 0.45),
-        AnchorPoint = Vector2.new(0, 0.5),
+        Position = UDim2.fromScale(0.99, 0.45),
+        AnchorPoint = Vector2.new(1, 0.5),
         Text = "Reports: 0",
         TextColor3 = REPORTS_COLOR,
         TextSize = 10,
         FontFace = Library.Fonts.Medium,
-        TextXAlignment = Enum.TextXAlignment.Left,
+        TextXAlignment = Enum.TextXAlignment.Right,
         ZIndex = 5,
         Visible = false,
     }, holder)
@@ -260,12 +286,12 @@ local function SetupCharacterPreview(previewContainer)
     local nameLabel = create("TextLabel", {
         Name = "NameLabel",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 18),
-        Position = UDim2.fromScale(0.5, -0.08),
+        Size = UDim2.new(1, 0, 0, 16),
+        Position = UDim2.fromScale(0.5, -0.03),
         AnchorPoint = Vector2.new(0.5, 1),
         Text = "Jogador",
         TextColor3 = Color3.fromRGB(255, 255, 255),
-        TextSize = 13,
+        TextSize = 12,
         FontFace = Library.Fonts.Bold,
         TextXAlignment = Enum.TextXAlignment.Center,
         ZIndex = 5,
@@ -277,12 +303,12 @@ local function SetupCharacterPreview(previewContainer)
     local distanceLabel = create("TextLabel", {
         Name = "DistanceLabel",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 16),
-        Position = UDim2.fromScale(0.5, 1.05),
+        Size = UDim2.new(1, 0, 0, 14),
+        Position = UDim2.fromScale(0.5, 1.03),
         AnchorPoint = Vector2.new(0.5, 0),
-        Text = "1175m",
+        Text = "1133m",
         TextColor3 = Color3.fromRGB(200, 200, 200),
-        TextSize = 11,
+        TextSize = 10,
         FontFace = Library.Fonts.Medium,
         TextXAlignment = Enum.TextXAlignment.Center,
         ZIndex = 5,
@@ -306,7 +332,7 @@ local function SetupCharacterPreview(previewContainer)
         arrows = false,
         color = CHAMS_COLOR,
         previewHealth = 100,
-        previewDistance = "1175m",
+        previewDistance = "1133m",
     }
 
     local function applyColor(c)
@@ -328,7 +354,7 @@ local function SetupCharacterPreview(previewContainer)
 
     local function updateHealthBar()
         local ratio = math.clamp(state.previewHealth / 100, 0, 1)
-        healthBarBg.Size = UDim2.fromOffset(HEALTH_BAR_WIDTH, holder.AbsoluteSize.Y)
+        healthBarBg.Size = UDim2.new(0, HEALTH_BAR_WIDTH, 1, 0)
         healthBarBg.Position = UDim2.fromScale(0, 0)
         healthBarFill.Size = UDim2.fromScale(1, ratio)
     end
@@ -348,6 +374,21 @@ local function SetupCharacterPreview(previewContainer)
     local function updateArrow()
         arrowLabel.Position = UDim2.fromScale(0.5, -0.15)
     end
+
+    -- Re-sincroniza overlays dependentes de tamanho quando o holder muda de tamanho
+    -- (esqueleto em pixels, barra de vida e tracer), cobrindo o caso de layout inicial.
+    holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+        for i, pair in ipairs(jointPairs) do
+            local line = skeletonLines[i]
+            if line then
+                local dist, angle = lineSpec(pair[1], pair[2])
+                line.Size = UDim2.fromOffset(dist, SKELETON_THICKNESS)
+                line.Rotation = angle
+            end
+        end
+        if state.healthbar then updateHealthBar() end
+        if state.tracers then updateTracer() end
+    end)
 
     local controller = {}
 
@@ -548,7 +589,7 @@ local function buildEspPanel(kind)
             Name = "PreviewFrame",
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.fromOffset(200, 210),
+            Size = UDim2.fromOffset(200, 268),
             BackgroundColor3 = Color3.fromRGB(15, 15, 20),
             BorderSizePixel = 0,
             ClipsDescendants = true,
@@ -597,12 +638,14 @@ local function buildEspPanel(kind)
         Library.ESPPreviewControllers[kind] = previewController
 
         -- Quick-Toggle Button Grid at Preview Bottom (3 rows x 4 cols)
+        -- 98px = 3 linhas de 30 + 2 gaps de 4; fica 3px acima do container
+        -- (~8px de respiro até a borda laranja) e abaixo do rótulo de distância.
         local toggleButtonsFrame = create("Frame", {
             Name = "QuickTogglesGrid",
             BackgroundTransparency = 1,
             AnchorPoint = Vector2.new(0.5, 1),
-            Position = UDim2.fromScale(0.5, 1),
-            Size = UDim2.new(1, -16, 0, 108),
+            Position = UDim2.new(0.5, 0, 1, -3),
+            Size = UDim2.new(1, 0, 0, 98),
         }, previewContainer)
         local gridLayout = create("UIGridLayout", {
             CellSize = UDim2.fromOffset(44, 30),
@@ -614,7 +657,6 @@ local function buildEspPanel(kind)
             StartCorner = Enum.StartCorner.TopLeft,
             FillDirectionMaxCells = 4,
         }, toggleButtonsFrame)
-        pad(toggleButtonsFrame, 8, 8, 4, 4)
 
         local quickToggles = {
             { key = "highlight", label = "Destaque", setter = function(v) previewController.SetChams(v) end },
@@ -704,7 +746,7 @@ local function buildEspPanel(kind)
         local fold = rightPanel:Foldout({ Name = "Configurações gerais", Build = function(p)
             p:Slider({ Name = "Distância máx.", Min = 100, Max = 3000, Default = 1000, Suffix = "m", Step = 50, Callback = function(v) S.maxDist = v end })
             p:Slider({ Name = "Tamanho do texto", Min = 9, Max = 16, Default = 10, Callback = function(v) S.textSize = v end })
-            p:Slider({ Name = "Distância da prévia", Min = 10, Max = 2000, Default = 120, Suffix = "m", Step = 10, Callback = function(v) S.prevDist = v; previewController.SetPreviewDistance(v .. "m") end })
+            p:Slider({ Name = "Distância da prévia", Min = 10, Max = 2000, Default = 1133, Suffix = "m", Step = 1, Callback = function(v) S.prevDist = v; previewController.SetPreviewDistance(v .. "m") end })
             p:Slider({ Name = "Vida da prévia", Min = 0, Max = 100, Default = 100, Callback = function(v) S.prevHp = v; previewController.SetPreviewHealth(v) end })
             p:Toggle({ Name = "Só detalhes de perto", Default = true, Tooltip = "Longe, mostra só um ponto e a distância. Perto, mostra tudo.", Callback = function(v) S.lod.on = v end })
             p:Slider({ Name = "Detalhes até", Min = 20, Max = 1000, Default = 150, Suffix = "m", Step = 10, Callback = function(v) S.lod.near = v end })

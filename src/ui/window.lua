@@ -148,6 +148,7 @@ function Window:_getModal(key, titles, build, headerExtras)
     self._modals = self._modals or {}
     local m = self._modals[key]
     if m then return m end
+    local modalRef = {}
     local overlay = create("Frame", { Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, Visible = false, ZIndex = 20 }, self._content)
     bind(overlay, "BackgroundColor3", "Background")
     local function makeBox(left, title, extras)
@@ -156,55 +157,69 @@ function Window:_getModal(key, titles, build, headerExtras)
         local st = create("UIStroke", { Thickness = 1, Transparency = 0.15 }, f); bind(st, "Color", "Accent")
         
         -- Header bar with title + optional extras (action buttons)
+        -- Posicionamento manual (sem UIListLayout + spacer): o spacer em escala estourava
+        -- a largura da coluna e empurrava os ícones para fora da própria caixa.
         local header = create("Frame", {
             BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, 28),
             Position = UDim2.fromScale(0, 0),
         }, f)
-        local headerLayout = listLayout(header, 6, Enum.FillDirection.Horizontal)
-        headerLayout.HorizontalAlignment = left and Enum.HorizontalAlignment.Left or Enum.HorizontalAlignment.Right
-        headerLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-        pad(header, 8, 8, 0, 0)
-        
-        label(header, title or "", 12, "Muted", true, { Size = UDim2.fromOffset(left and 80 or 100, 22), TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Center })
-        
-        -- Add extra buttons if provided
-        if extras then
-            if left and extras.leftActions then
-                local spacer = create("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, -140, 1, 0) }, header)
-                local actionContainer = create("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(#extras.leftActions * 30, 22) }, header)
-                local actionLayout = listLayout(actionContainer, 4, Enum.FillDirection.Horizontal)
-                actionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-                actionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-                for _, btnCfg in extras.leftActions do
-                    local btn = create("TextButton", {
-                        BackgroundTransparency = 1,
-                        Size = UDim2.fromOffset(24, 24),
-                        Text = "",
-                        AutoButtonColor = false,
-                    }, actionContainer)
-                    icon(btn, btnCfg.icon, 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
-                    corner(btn, 4)
-                    if btnCfg.callback then btn.Activated:Connect(btnCfg.callback) end
-                end
-            elseif not left and extras.rightActions then
-                local spacer = create("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, -140, 1, 0) }, header)
-                local actionContainer = create("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(#extras.rightActions * 30, 22) }, header)
-                local actionLayout = listLayout(actionContainer, 4, Enum.FillDirection.Horizontal)
-                actionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-                actionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-                for _, btnCfg in extras.rightActions do
-                    local btn = create("TextButton", {
-                        BackgroundTransparency = 1,
-                        Size = UDim2.fromOffset(24, 24),
-                        Text = "",
-                        AutoButtonColor = false,
-                    }, actionContainer)
-                    icon(btn, btnCfg.icon, 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
-                    corner(btn, 4)
-                    if btnCfg.callback then btn.Activated:Connect(btnCfg.callback) end
+
+        -- Ações alinhadas à direita, sempre dentro dos limites da própria coluna
+        local function makeActions(actions)
+            local totalW = math.max(#actions, 1) * 30 - 6
+            local actionContainer = create("Frame", {
+                BackgroundTransparency = 1,
+                AnchorPoint = Vector2.new(1, 0),
+                Position = UDim2.new(1, -10, 0, 3),
+                Size = UDim2.fromOffset(totalW, 22),
+            }, header)
+            local actionLayout = listLayout(actionContainer, 4, Enum.FillDirection.Horizontal)
+            actionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+            for _, btnCfg in actions do
+                local btn = create("TextButton", {
+                    BackgroundTransparency = 1,
+                    Size = UDim2.fromOffset(24, 24),
+                    Text = "",
+                    AutoButtonColor = false,
+                }, actionContainer)
+                icon(btn, btnCfg.icon, 18, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
+                corner(btn, 4)
+                if btnCfg.callback then
+                    btn.Activated:Connect(function()
+                        safeCall(btnCfg.callback, modalRef.m)
+                    end)
                 end
             end
+            return totalW
+        end
+
+        local actionsW = 0
+        if extras then
+            if left and extras.leftActions then
+                actionsW = makeActions(extras.leftActions)
+            elseif not left and extras.rightActions then
+                actionsW = makeActions(extras.rightActions)
+            end
+        end
+
+        if left then
+            label(header, title or "", 12, "Muted", true, {
+                Position = UDim2.fromOffset(8, 3),
+                Size = UDim2.fromOffset(110, 22),
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextYAlignment = Enum.TextYAlignment.Center,
+            })
+        else
+            -- Título encostado à esquerda das ações (ou antes do X padrão)
+            local rightPad = actionsW > 0 and (10 + actionsW + 6) or 40
+            label(header, title or "", 12, "Muted", true, {
+                AnchorPoint = Vector2.new(1, 0.5),
+                Position = UDim2.new(1, -rightPad, 0.5, 0),
+                Size = UDim2.fromOffset(110, 22),
+                TextXAlignment = Enum.TextXAlignment.Right,
+                TextYAlignment = Enum.TextYAlignment.Center,
+            })
         end
         
         local ln = create("Frame", { Position = UDim2.fromOffset(8, 28), Size = UDim2.new(1, -16, 0, 1), BorderSizePixel = 0, BackgroundTransparency = 0.4 }, f)
@@ -225,6 +240,7 @@ function Window:_getModal(key, titles, build, headerExtras)
     bind(rs, "ScrollBarImageColor3", "Accent")
     listLayout(rs, 0); pad(rs, 4, 6, 0, 4)
     m = { Overlay = overlay, Left = lbody, LeftBox = lb, RightBox = rb, RightScroll = rs, Close = function() overlay.Visible = false end }
+    modalRef.m = m
     m.Right = setmetatable({ List = rs, _order = 0, Window = self, _path = key .. "/painel" }, Container)
     self._modals[key] = m
     safeCall(build, m)
