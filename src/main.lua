@@ -565,12 +565,12 @@ do
     end
 end
 
--- ---------- Features ----------
-BBC.Features.buildVisuals(Window)
-
--- Register ESP preview modals (after visuals builds the buildEspPanel)
+-- Register ESP preview modals BEFORE building visuals tab (so Controls.T can find them)
 BBC.MODALS["Jogador"] = { build = BBC.Features.buildEspPanel("Jogador"), titles = { Left = "PRÉVIA", Right = "Ajustes gerais" } }
 BBC.MODALS["NPCs"] = { build = BBC.Features.buildEspPanel("NPCs"), titles = { Left = "PRÉVIA", Right = "Ajustes do NPC" } }
+
+-- ---------- Features ----------
+BBC.Features.buildVisuals(Window)
 
 BBC.Features.buildPlayer(Window)
 BBC.Features.buildCombat(Window)

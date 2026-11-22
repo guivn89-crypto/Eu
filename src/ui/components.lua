@@ -336,17 +336,35 @@ function Container:Toggle(opts)
     row.MouseEnter:Connect(function() if not locked then tween(row, { BackgroundTransparency = 0.93 }, 0.12) end end)
     row.MouseLeave:Connect(function() tween(row, { BackgroundTransparency = 1 }, 0.18) end)
 
-    -- Modal (painel grande)
+    -- Modal (painel grande) - click entire row to open
     if type(opts.Modal) == "function" then
         local key = (self._path or "") .. "/" .. tostring(opts.Name)
         local hooked = false
-        local _, gi = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
+        local modalBtn = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
             local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal)
             if not hooked then
                 hooked = true
                 m.Overlay:GetPropertyChangedSignal("Visible"):Connect(function()
-                    if gi and gi.ImageColor3 then
-                        gi.ImageColor3 = m.Overlay.Visible and Library.Theme.Accent or Library.Theme.Text
+                    if modalBtn and modalBtn.ImageColor3 then
+                        modalBtn.ImageColor3 = m.Overlay.Visible and Library.Theme.Accent or Library.Theme.Text
+                    end
+                end)
+            end
+            m.Overlay.Visible = not m.Overlay.Visible
+        end)
+        -- Hide the gear button - row click will open modal
+        modalBtn.Visible = false
+        
+        -- Make entire row click open the modal
+        row.MouseButton1Click:Connect(function()
+            if row:GetAttribute("TipHeld") then return end
+            if locked then return end
+            local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal)
+            if not hooked then
+                hooked = true
+                m.Overlay:GetPropertyChangedSignal("Visible"):Connect(function()
+                    if modalBtn and modalBtn.ImageColor3 then
+                        modalBtn.ImageColor3 = m.Overlay.Visible and Library.Theme.Accent or Library.Theme.Text
                     end
                 end)
             end

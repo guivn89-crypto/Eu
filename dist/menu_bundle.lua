@@ -2240,6 +2240,10 @@ function Protection.startESPEngine()
     end
     
     local function startNpcScan()
+        -- Only scan NPCs if NPC ESP is explicitly enabled
+        local S = Library.ESP and Library.ESP.NPCs
+        if not S or not S.highlight.on then return end
+        
         if npcScan then return end
         npcScan = true
         task.spawn(function()
@@ -2283,6 +2287,22 @@ function Protection.startESPEngine()
     local function hideDraw(d)
         d.root.Visible = false
         d.hl.Enabled = false
+        d.boxFull.Visible = false
+        for i = 1, 8 do d.corners[i].Visible = false end
+        d.hbBg.Visible = false
+        d.name.Visible = false
+        d.hp.Visible = false
+        d.dist.Visible = false
+        d.near.Visible = false
+        d.tracer.Visible = false
+        d.arrow.Visible = false
+        d.dot.Visible = false
+        d.kdr.Visible = false
+        d.reports.Visible = false
+        if d.skelOn then
+            for _, f in ipairs(d.skel) do f.Visible = false end
+            d.skelOn = false
+        end
     end
     
     local function drawTarget(d, t, S, c, vp, isNearest)
@@ -2377,12 +2397,20 @@ function Protection.startESPEngine()
                 d.near.Position = UDim2.fromOffset(cx, top - 2 - (S.name.on and (ts + 3) or 0))
             end
             if S.name.on then
-                d.name.Visible = true; d.name.Text = t.name; d.name.TextSize = ts; d.name.TextColor3 = S.name.color
-                d.name.Position = UDim2.fromOffset(cx, top - 2)
+                d.name.Visible = true; d.name.Text = t.name; 
+                local nameSize = math.max(ts - 1, 12) -- Clamp to 12-13 range
+                d.name.TextSize = nameSize
+                d.name.TextColor3 = S.name.color
+                -- Center name using TextBounds for exact positioning
+                d.name.Size = UDim2.fromOffset(200, nameSize + 2) -- Ensure enough width for TextBounds
+                local nameX = cx - d.name.TextBounds.X / 2
+                d.name.Position = UDim2.fromOffset(nameX, top - 2)
             end
             if S.distance.on then
                 d.dist.Visible = true; d.dist.Text = distText; d.dist.TextSize = math.max(ts-1,8); d.dist.TextColor3 = S.distance.color
-                d.dist.Position = UDim2.fromOffset(cx, bottom + 2)
+                d.dist.Size = UDim2.fromOffset(120, 14)
+                local distX = cx - d.dist.TextBounds.X / 2
+                d.dist.Position = UDim2.fromOffset(distX, bottom + 2)
             end
             -- K/D display
             if S.kdr and S.kdr.on then
@@ -2459,6 +2487,7 @@ function Protection.startESPEngine()
     
     local function gather(kind, out)
         if kind == "Jogador" then
+            -- Player ESP ONLY iterates Players:GetPlayers() (excluding LocalPlayer)
             for _, pl in ipairs(Players:GetPlayers()) do
                 if pl ~= LP then
                     local ch = pl.Character
@@ -2467,7 +2496,11 @@ function Protection.startESPEngine()
                     if hum and hrp and hum.Health > 0 then out[#out+1] = { model = ch, hum = hum, hrp = hrp, name = pl.DisplayName ~= "" and pl.DisplayName or pl.Name } end
                 end
             end
-        else
+        elseif kind == "NPCs" then
+            -- NPC ESP ONLY runs when NPC highlight toggle is explicitly true
+            local S = Library.ESP and Library.ESP.NPCs
+            if not S or not S.highlight.on then return end
+            
             startNpcScan()
             for m, hum in pairs(npcs) do
                 if not m.Parent or not m:IsDescendantOf(Workspace) then
@@ -2490,6 +2523,11 @@ function Protection.startESPEngine()
         local maxM = S and S.maxDist or 1000
         local vis = {}
         for _, t in ipairs(list) do
+            -- Validate character, Humanoid, HRP exist and health > 0
+            if not t.model or not t.model.Parent then continue end
+            if not t.hum or not t.hum.Parent or t.hum.Health <= 0 then continue end
+            if not t.hrp or not t.hrp.Parent or not t.hrp:IsA("BasePart") then continue end
+            
             t.studs = (t.hrp.Position - camPos).Magnitude
             t.m = t.studs * 0.28
             if t.m <= maxM then vis[#vis+1] = t end
@@ -2498,6 +2536,7 @@ function Protection.startESPEngine()
         local seen = {}
         for i = 1, math.min(#vis, 24) do
             local t = vis[i]
+            -- Double-check onScreen in drawTarget, but also verify here
             seen[t.model] = true
             local d = P[t.model]
             if not d then d = newDraw(); P[t.model] = d end
@@ -2579,13 +2618,14 @@ function Protection.registerESPFeatures()
     Library.ESP = Library.ESP or {}
     
     -- Initialize default ESP config for all kinds at startup (so toggle works without opening settings first)
+    -- ALL features start OFF by default - user enables them explicitly
     local defaultESPConfig = {
-        highlight = { on = true, color = Color3.fromRGB(245, 160, 30), alpha = 0.6, outline = 2 },
-        box = { on = true, color = Color3.fromRGB(215, 215, 215), thick = 1, style = "Completa", corner = 14, alpha = 0.5 },
-        name = { on = true, color = Color3.fromRGB(235, 235, 235) },
-        healthbar = { on = true, auto = true, color = Color3.fromRGB(45, 205, 190), width = 2, side = "Esquerda" },
-        health = { on = true, color = Color3.fromRGB(70, 220, 90) },
-        distance = { on = true, color = Color3.fromRGB(235, 235, 235), unit = "m" },
+        highlight = { on = false, color = Color3.fromRGB(245, 160, 30), alpha = 0.6, outline = 2 },
+        box = { on = false, color = Color3.fromRGB(215, 215, 215), thick = 1, style = "Completa", corner = 14, alpha = 0.5 },
+        name = { on = false, color = Color3.fromRGB(235, 235, 235) },
+        healthbar = { on = false, auto = true, color = Color3.fromRGB(45, 205, 190), width = 2, side = "Esquerda" },
+        health = { on = false, color = Color3.fromRGB(70, 220, 90) },
+        distance = { on = false, color = Color3.fromRGB(235, 235, 235), unit = "m" },
         kdr = { on = false, color = Color3.fromRGB(255, 200, 90) },
         reports = { on = false, color = Color3.fromRGB(255, 140, 90) },
         tracers = { on = false, color = Color3.fromRGB(255, 255, 255), thick = 1, origin = "Baixo" },
@@ -2611,9 +2651,38 @@ function Protection.registerESPFeatures()
         for k, v in pairs(npcConfig) do Library.ESP["NPCs"][k] = v end
     end
     
+    local function cleanupKindDrawings(kind)
+        local P = pool[kind]
+        if not P then return end
+        for model, d in pairs(P) do
+            d.root:Destroy()
+            d.hl:Destroy()
+            P[model] = nil
+        end
+    end
+    
     local function toggleESP(kind, enabled)
         local S = Library.ESP and Library.ESP[kind]
-        if S then S.highlight.on = enabled; S.box.on = enabled; S.name.on = enabled end
+        if not S then return end
+        
+        -- Disable ALL features when main toggle is off
+        if not enabled then
+            S.highlight.on = false
+            S.box.on = false
+            S.name.on = false
+            S.healthbar.on = false
+            S.health.on = false
+            S.distance.on = false
+            S.kdr.on = false
+            S.reports.on = false
+            S.tracers.on = false
+            S.arrows.on = false
+            S.skeleton.on = false
+            
+            -- Immediately clean up all drawings for this kind
+            cleanupKindDrawings(kind)
+        end
+        
         secureLog(1, "[BBC][ESP] Toggle " .. kind .. ": " .. tostring(enabled))
         if enabled then Protection.startESPEngine() end
     end
@@ -3229,17 +3298,35 @@ function Container:Toggle(opts)
     row.MouseEnter:Connect(function() if not locked then tween(row, { BackgroundTransparency = 0.93 }, 0.12) end end)
     row.MouseLeave:Connect(function() tween(row, { BackgroundTransparency = 1 }, 0.18) end)
 
-    -- Modal (painel grande)
+    -- Modal (painel grande) - click entire row to open
     if type(opts.Modal) == "function" then
         local key = (self._path or "") .. "/" .. tostring(opts.Name)
         local hooked = false
-        local _, gi = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
+        local modalBtn = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
             local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal)
             if not hooked then
                 hooked = true
                 m.Overlay:GetPropertyChangedSignal("Visible"):Connect(function()
-                    if gi and gi.ImageColor3 then
-                        gi.ImageColor3 = m.Overlay.Visible and Library.Theme.Accent or Library.Theme.Text
+                    if modalBtn and modalBtn.ImageColor3 then
+                        modalBtn.ImageColor3 = m.Overlay.Visible and Library.Theme.Accent or Library.Theme.Text
+                    end
+                end)
+            end
+            m.Overlay.Visible = not m.Overlay.Visible
+        end)
+        -- Hide the gear button - row click will open modal
+        modalBtn.Visible = false
+        
+        -- Make entire row click open the modal
+        row.MouseButton1Click:Connect(function()
+            if row:GetAttribute("TipHeld") then return end
+            if locked then return end
+            local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal)
+            if not hooked then
+                hooked = true
+                m.Overlay:GetPropertyChangedSignal("Visible"):Connect(function()
+                    if modalBtn and modalBtn.ImageColor3 then
+                        modalBtn.ImageColor3 = m.Overlay.Visible and Library.Theme.Accent or Library.Theme.Text
                     end
                 end)
             end
@@ -7300,12 +7387,12 @@ do
     end
 end
 
--- ---------- Features ----------
-BBC.Features.buildVisuals(Window)
-
--- Register ESP preview modals (after visuals builds the buildEspPanel)
+-- Register ESP preview modals BEFORE building visuals tab (so Controls.T can find them)
 BBC.MODALS["Jogador"] = { build = BBC.Features.buildEspPanel("Jogador"), titles = { Left = "PRÉVIA", Right = "Ajustes gerais" } }
 BBC.MODALS["NPCs"] = { build = BBC.Features.buildEspPanel("NPCs"), titles = { Left = "PRÉVIA", Right = "Ajustes do NPC" } }
+
+-- ---------- Features ----------
+BBC.Features.buildVisuals(Window)
 
 BBC.Features.buildPlayer(Window)
 BBC.Features.buildCombat(Window)
