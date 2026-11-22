@@ -1,3 +1,4 @@
+--!strict
 --[[
     BBC HUB - Theme & Library Core
     Biblioteca principal: fontes, temas, bindings, loop de FPS, API de servidores.

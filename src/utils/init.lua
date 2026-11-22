@@ -1,3 +1,4 @@
+--!strict
 --[[
     BBC HUB - Shared Initialization Utilities
     Common setup functions used across modules.

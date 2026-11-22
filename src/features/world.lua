@@ -1,3 +1,4 @@
+--!strict
 --[[
     BBC HUB - Feature: World
     Abas MUNDO, EXTRAS, BUSCAR SAQUE, SERVIDORES, SKINS, MISSÕES, COMERCIANTES.

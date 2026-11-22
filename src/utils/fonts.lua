@@ -1,3 +1,4 @@
+--!strict
 --[[
     BBC HUB - Font Utilities
     Shared font loading with fallback for executor compatibility (Delta, etc.)

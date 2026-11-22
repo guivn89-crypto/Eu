@@ -1,3 +1,4 @@
+--!strict
 --[[
     BBC HUB - Window
     Abas, grupos, janela principal, persistência de configuração,
@@ -161,7 +162,7 @@ function Window:_getModal(key, titles, build, headerExtras)
             Position = UDim2.fromScale(0, 0),
         }, f)
         local headerLayout = listLayout(header, 6, Enum.FillDirection.Horizontal)
-        headerLayout.HorizontalAlignment = left and Enum.HorizontalAlignment.Left or Enum.HorizontalAlignment.Left
+        headerLayout.HorizontalAlignment = left and Enum.HorizontalAlignment.Left or Enum.HorizontalAlignment.Right
         headerLayout.VerticalAlignment = Enum.VerticalAlignment.Center
         pad(header, 8, 8, 0, 0)
         
@@ -175,7 +176,7 @@ function Window:_getModal(key, titles, build, headerExtras)
                 local actionLayout = listLayout(actionContainer, 4, Enum.FillDirection.Horizontal)
                 actionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
                 actionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-                for i, btnCfg in ipairs(extras.leftActions) do
+                for _, btnCfg in extras.leftActions do
                     local btn = create("TextButton", {
                         BackgroundTransparency = 1,
                         Size = UDim2.fromOffset(24, 24),
@@ -192,7 +193,7 @@ function Window:_getModal(key, titles, build, headerExtras)
                 local actionLayout = listLayout(actionContainer, 4, Enum.FillDirection.Horizontal)
                 actionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
                 actionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-                for i, btnCfg in ipairs(extras.rightActions) do
+                for _, btnCfg in extras.rightActions do
                     local btn = create("TextButton", {
                         BackgroundTransparency = 1,
                         Size = UDim2.fromOffset(24, 24),

@@ -1,3 +1,4 @@
+--!strict
 --[[
     BBC HUB - Components
     Elementos reutilizáveis (Toggle, Slider, Dropdown, Keybind, ColorPicker,

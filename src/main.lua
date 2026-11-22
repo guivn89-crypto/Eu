@@ -1,3 +1,4 @@
+--!strict
 --[[
     BBC HUB - Entry point
     Bootstrap da aplicação: i18n, configuração, janela, overlays,

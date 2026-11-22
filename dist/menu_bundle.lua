@@ -33,6 +33,7 @@ end
 -- módulo: utils.security  (utils/security.lua)
 -- ============================================================
 __module("utils.security", function(BBC)
+--!strict
 --[[
     BBC HUB - Security
     Camada de proteção e utilitários seguros.
@@ -217,6 +218,7 @@ end)
 -- módulo: utils.drawing  (utils/drawing.lua)
 -- ============================================================
 __module("utils.drawing", function(BBC)
+--!strict
 --[[
     BBC HUB - Drawing / UI primitives
     Helpers de criação de instâncias, ícones, notificações e utilitários visuais.
@@ -577,6 +579,7 @@ end)
 -- módulo: utils.fonts  (utils/fonts.lua)
 -- ============================================================
 __module("utils.fonts", function(BBC)
+--!strict
 --[[
     BBC HUB - Font Utilities
     Shared font loading with fallback for executor compatibility (Delta, etc.)
@@ -667,6 +670,7 @@ end)
 -- módulo: utils.init  (utils/init.lua)
 -- ============================================================
 __module("utils.init", function(BBC)
+--!strict
 --[[
     BBC HUB - Shared Initialization Utilities
     Common setup functions used across modules.
@@ -706,6 +710,7 @@ end)
 -- módulo: utils.protection  (utils/protection.lua)
 -- ============================================================
 __module("utils.protection", function(BBC)
+--!strict
 --[[
     BBC HUB - Advanced Protection & Bypass Layer (Complete)
     Camada completa de proteção, ofuscação, bypass e compatibilidade multi-executor.
@@ -2520,7 +2525,7 @@ function Protection.startESPEngine()
         local list = {}
         if S and not Library.Panic and S.enabled and anyOn(S) then gather(kind, list) end
         local camPos = c.CFrame.Position
-        local maxM = S and S.maxDist or 1000
+        local maxM = (S and S.maxDist) or 1000
         local vis = {}
         for _, t in ipairs(list) do
             -- Validate character, Humanoid, HRP exist and health > 0
@@ -2637,19 +2642,24 @@ function Protection.registerESPFeatures()
         maxDist = 1000, textSize = 10, prevDist = 120, prevHp = 100,
     }
     
-    local npcConfig = {}
-    for k, v in pairs(defaultESPConfig) do npcConfig[k] = v end
+    local function deepClone(t)
+        local copy = table.clone(t)
+        for k, v in copy do
+            if type(v) == "table" then copy[k] = deepClone(v) end
+        end
+        return copy
+    end
+    
+    local npcConfig = deepClone(defaultESPConfig)
     npcConfig.highlight.color = Color3.fromRGB(240, 95, 95)
     
-    for _, kind in ipairs({ "Jogador", "Corpo", "Recipiente", "Item no chão", "Itens de missão" }) do
+    for _, kind in { "Jogador", "Corpo", "Recipiente", "Item no chão", "Itens de missão" } do
         if not Library.ESP[kind] then
-            Library.ESP[kind] = {}
-            for k, v in pairs(defaultESPConfig) do Library.ESP[kind][k] = v end
+            Library.ESP[kind] = deepClone(defaultESPConfig)
         end
     end
     if not Library.ESP["NPCs"] then
-        Library.ESP["NPCs"] = {}
-        for k, v in pairs(npcConfig) do Library.ESP["NPCs"][k] = v end
+        Library.ESP["NPCs"] = deepClone(npcConfig)
     end
     
     local function cleanupKindDrawings(kind)
@@ -2662,15 +2672,15 @@ function Protection.registerESPFeatures()
         end
     end
     
-    local function toggleESP(kind, enabled)
+    local function toggleESP(kind, isEnabled)
         local S = Library.ESP and Library.ESP[kind]
         if not S then return end
         
         -- Set master enabled flag
-        S.enabled = enabled
+        S.enabled = isEnabled
         
         -- Disable ALL features when main toggle is off
-        if not enabled then
+        if not isEnabled then
             S.highlight.on = false
             S.box.on = false
             S.name.on = false
@@ -2688,8 +2698,8 @@ function Protection.registerESPFeatures()
         end
         -- When enabled = true, do NOT auto-enable sub-features (user controls them individually)
         
-        secureLog(1, "[BBC][ESP] Toggle " .. kind .. ": " .. tostring(enabled))
-        if enabled then Protection.startESPEngine() end
+        secureLog(1, "[BBC][ESP] Toggle " .. kind .. ": " .. tostring(isEnabled))
+        if isEnabled then Protection.startESPEngine() end
     end
     
     Library.Features["Jogador"] = function(v) toggleESP("Jogador", v) end
@@ -2735,6 +2745,7 @@ end)
 -- módulo: ui.theme  (ui/theme.lua)
 -- ============================================================
 __module("ui.theme", function(BBC)
+--!strict
 --[[
     BBC HUB - Theme & Library Core
     Biblioteca principal: fontes, temas, bindings, loop de FPS, API de servidores.
@@ -2965,6 +2976,7 @@ end)
 -- módulo: ui.components  (ui/components.lua)
 -- ============================================================
 __module("ui.components", function(BBC)
+--!strict
 --[[
     BBC HUB - Components
     Elementos reutilizáveis (Toggle, Slider, Dropdown, Keybind, ColorPicker,
@@ -3868,6 +3880,7 @@ end)
 -- módulo: ui.window  (ui/window.lua)
 -- ============================================================
 __module("ui.window", function(BBC)
+--!strict
 --[[
     BBC HUB - Window
     Abas, grupos, janela principal, persistência de configuração,
@@ -4031,7 +4044,7 @@ function Window:_getModal(key, titles, build, headerExtras)
             Position = UDim2.fromScale(0, 0),
         }, f)
         local headerLayout = listLayout(header, 6, Enum.FillDirection.Horizontal)
-        headerLayout.HorizontalAlignment = left and Enum.HorizontalAlignment.Left or Enum.HorizontalAlignment.Left
+        headerLayout.HorizontalAlignment = left and Enum.HorizontalAlignment.Left or Enum.HorizontalAlignment.Right
         headerLayout.VerticalAlignment = Enum.VerticalAlignment.Center
         pad(header, 8, 8, 0, 0)
         
@@ -4045,7 +4058,7 @@ function Window:_getModal(key, titles, build, headerExtras)
                 local actionLayout = listLayout(actionContainer, 4, Enum.FillDirection.Horizontal)
                 actionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
                 actionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-                for i, btnCfg in ipairs(extras.leftActions) do
+                for _, btnCfg in extras.leftActions do
                     local btn = create("TextButton", {
                         BackgroundTransparency = 1,
                         Size = UDim2.fromOffset(24, 24),
@@ -4062,7 +4075,7 @@ function Window:_getModal(key, titles, build, headerExtras)
                 local actionLayout = listLayout(actionContainer, 4, Enum.FillDirection.Horizontal)
                 actionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
                 actionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-                for i, btnCfg in ipairs(extras.rightActions) do
+                for _, btnCfg in extras.rightActions do
                     local btn = create("TextButton", {
                         BackgroundTransparency = 1,
                         Size = UDim2.fromOffset(24, 24),
@@ -5065,6 +5078,7 @@ end)
 -- módulo: features.visuals  (features/visuals.lua)
 -- ============================================================
 __module("features.visuals", function(BBC)
+--!strict
 --[[
     BBC HUB - Feature: Visuals
     Aba VISUAIS: ESP, interface do jogo e efeitos locais.
@@ -5905,6 +5919,7 @@ end)
 -- módulo: features.player  (features/player.lua)
 -- ============================================================
 __module("features.player", function(BBC)
+--!strict
 --[[
     BBC HUB - Feature: Player
     Aba JOGADOR: movimento, câmera, saque, animações, recursos.
@@ -6297,6 +6312,7 @@ end)
 -- módulo: features.combat  (features/combat.lua)
 -- ============================================================
 __module("features.combat", function(BBC)
+--!strict
 --[[
     BBC HUB - Feature: Combat
     Aba COMBATE: mira, alvos, espia, corpo a corpo, arma, efeitos, anti-aim, granadas.
@@ -6354,6 +6370,7 @@ end)
 -- módulo: features.world  (features/world.lua)
 -- ============================================================
 __module("features.world", function(BBC)
+--!strict
 --[[
     BBC HUB - Feature: World
     Abas MUNDO, EXTRAS, BUSCAR SAQUE, SERVIDORES, SKINS, MISSÕES, COMERCIANTES.
@@ -6771,6 +6788,7 @@ end)
 -- módulo: main  (main.lua)
 -- ============================================================
 __module("main", function(BBC)
+--!strict
 --[[
     BBC HUB - Entry point
     Bootstrap da aplicação: i18n, configuração, janela, overlays,

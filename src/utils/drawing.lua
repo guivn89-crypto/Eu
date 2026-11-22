@@ -1,3 +1,4 @@
+--!strict
 --[[
     BBC HUB - Drawing / UI primitives
     Helpers de criação de instâncias, ícones, notificações e utilitários visuais.

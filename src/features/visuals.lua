@@ -1,3 +1,4 @@
+--!strict
 --[[
     BBC HUB - Feature: Visuals
     Aba VISUAIS: ESP, interface do jogo e efeitos locais.

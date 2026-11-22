@@ -1,3 +1,4 @@
+--!strict
 --[[
     BBC HUB - Security
     Camada de proteção e utilitários seguros.

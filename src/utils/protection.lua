@@ -1,3 +1,4 @@
+--!strict
 --[[
     BBC HUB - Advanced Protection & Bypass Layer (Complete)
     Camada completa de proteção, ofuscação, bypass e compatibilidade multi-executor.
@@ -1812,7 +1813,7 @@ function Protection.startESPEngine()
         local list = {}
         if S and not Library.Panic and S.enabled and anyOn(S) then gather(kind, list) end
         local camPos = c.CFrame.Position
-        local maxM = S and S.maxDist or 1000
+        local maxM = (S and S.maxDist) or 1000
         local vis = {}
         for _, t in ipairs(list) do
             -- Validate character, Humanoid, HRP exist and health > 0
@@ -1929,19 +1930,24 @@ function Protection.registerESPFeatures()
         maxDist = 1000, textSize = 10, prevDist = 120, prevHp = 100,
     }
     
-    local npcConfig = {}
-    for k, v in pairs(defaultESPConfig) do npcConfig[k] = v end
+    local function deepClone(t)
+        local copy = table.clone(t)
+        for k, v in copy do
+            if type(v) == "table" then copy[k] = deepClone(v) end
+        end
+        return copy
+    end
+    
+    local npcConfig = deepClone(defaultESPConfig)
     npcConfig.highlight.color = Color3.fromRGB(240, 95, 95)
     
-    for _, kind in ipairs({ "Jogador", "Corpo", "Recipiente", "Item no chão", "Itens de missão" }) do
+    for _, kind in { "Jogador", "Corpo", "Recipiente", "Item no chão", "Itens de missão" } do
         if not Library.ESP[kind] then
-            Library.ESP[kind] = {}
-            for k, v in pairs(defaultESPConfig) do Library.ESP[kind][k] = v end
+            Library.ESP[kind] = deepClone(defaultESPConfig)
         end
     end
     if not Library.ESP["NPCs"] then
-        Library.ESP["NPCs"] = {}
-        for k, v in pairs(npcConfig) do Library.ESP["NPCs"][k] = v end
+        Library.ESP["NPCs"] = deepClone(npcConfig)
     end
     
     local function cleanupKindDrawings(kind)
@@ -1954,15 +1960,15 @@ function Protection.registerESPFeatures()
         end
     end
     
-    local function toggleESP(kind, enabled)
+    local function toggleESP(kind, isEnabled)
         local S = Library.ESP and Library.ESP[kind]
         if not S then return end
         
         -- Set master enabled flag
-        S.enabled = enabled
+        S.enabled = isEnabled
         
         -- Disable ALL features when main toggle is off
-        if not enabled then
+        if not isEnabled then
             S.highlight.on = false
             S.box.on = false
             S.name.on = false
@@ -1980,8 +1986,8 @@ function Protection.registerESPFeatures()
         end
         -- When enabled = true, do NOT auto-enable sub-features (user controls them individually)
         
-        secureLog(1, "[BBC][ESP] Toggle " .. kind .. ": " .. tostring(enabled))
-        if enabled then Protection.startESPEngine() end
+        secureLog(1, "[BBC][ESP] Toggle " .. kind .. ": " .. tostring(isEnabled))
+        if isEnabled then Protection.startESPEngine() end
     end
     
     Library.Features["Jogador"] = function(v) toggleESP("Jogador", v) end

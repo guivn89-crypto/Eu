@@ -1,3 +1,4 @@
+--!strict
 --[[
     BBC HUB - Feature: Combat
     Aba COMBATE: mira, alvos, espia, corpo a corpo, arma, efeitos, anti-aim, granadas.

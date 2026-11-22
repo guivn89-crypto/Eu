@@ -1,3 +1,4 @@
+--!strict
 --[[
     BBC HUB - Feature: Player
     Aba JOGADOR: movimento, câmera, saque, animações, recursos.
