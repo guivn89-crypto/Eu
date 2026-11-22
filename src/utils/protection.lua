@@ -1411,6 +1411,9 @@ function Protection.init(config)
     Protection._initialized = true
     secureLog(1, "Protection layer fully initialized")
 
+    -- Register ESP features so toggles work immediately at startup
+    task.defer(function() Protection.registerESPFeatures() end)
+
     return {
         executor = Protection.Executor,
         executorVersion = Protection.ExecutorVersion,
@@ -1867,9 +1870,43 @@ function Protection.registerESPFeatures()
     Library.Features = Library.Features or {}
     Library.ESP = Library.ESP or {}
     
+    -- Initialize default ESP config for all kinds at startup (so toggle works without opening settings first)
+    local defaultESPConfig = {
+        highlight = { on = true, color = Color3.fromRGB(245, 160, 30), alpha = 0.6, outline = 2 },
+        box = { on = true, color = Color3.fromRGB(215, 215, 215), thick = 1, style = "Completa", corner = 14, alpha = 0.5 },
+        name = { on = true, color = Color3.fromRGB(235, 235, 235) },
+        healthbar = { on = true, auto = true, color = Color3.fromRGB(45, 205, 190), width = 2, side = "Esquerda" },
+        health = { on = true, color = Color3.fromRGB(70, 220, 90) },
+        distance = { on = true, color = Color3.fromRGB(235, 235, 235), unit = "m" },
+        kdr = { on = false, color = Color3.fromRGB(255, 200, 90) },
+        reports = { on = false, color = Color3.fromRGB(255, 140, 90) },
+        tracers = { on = false, color = Color3.fromRGB(255, 255, 255), thick = 1, origin = "Baixo" },
+        arrows = { on = false, color = Color3.fromRGB(255, 90, 90), size = 18 },
+        skeleton = { on = false, color = Color3.fromRGB(255, 255, 255), thick = 1.5 },
+        frozen = false, locked = false,
+        lod = { on = true, near = 150 }, nearest = { on = false, color = Color3.fromRGB(255, 60, 60) },
+        maxDist = 1000, textSize = 10, prevDist = 120, prevHp = 100,
+    }
+    
+    local npcConfig = {}
+    for k, v in pairs(defaultESPConfig) do npcConfig[k] = v end
+    npcConfig.highlight.color = Color3.fromRGB(240, 95, 95)
+    
+    for _, kind in ipairs({ "Jogador", "Corpo", "Recipiente", "Item no chão", "Itens de missão" }) do
+        if not Library.ESP[kind] then
+            Library.ESP[kind] = {}
+            for k, v in pairs(defaultESPConfig) do Library.ESP[kind][k] = v end
+        end
+    end
+    if not Library.ESP["NPCs"] then
+        Library.ESP["NPCs"] = {}
+        for k, v in pairs(npcConfig) do Library.ESP["NPCs"][k] = v end
+    end
+    
     local function toggleESP(kind, enabled)
         local S = Library.ESP and Library.ESP[kind]
         if S then S.highlight.on = enabled; S.box.on = enabled; S.name.on = enabled end
+        print("[BBC][ESP] Toggle " .. kind .. ":", enabled)
         if enabled then Protection.startESPEngine() end
     end
     

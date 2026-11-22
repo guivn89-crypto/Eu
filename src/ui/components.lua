@@ -218,12 +218,12 @@ function Container:Toggle(opts)
 
     -- Modal (painel grande)
     if type(opts.Modal) == "function" then
-        local gear = create("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -(12 + 34 + 6), 0.5, 0), Size = UDim2.fromOffset(26, 26),
-            BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 3 }, row)
-        local gi = icon(gear, "sliders-horizontal", 17, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 3 })
+        local gear = create("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -(12 + 44 + 6), 0.5, 0), Size = UDim2.fromOffset(44, 44),
+            BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 4, Active = true, Selectable = true }, row)
+        local gi = icon(gear, "sliders-horizontal", 20, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 4 })
         local key = (self._path or "") .. "/" .. tostring(opts.Name)
         local hooked = false
-        gear.MouseButton1Click:Connect(function()
+        gear.Activated:Connect(function()
             local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal)
             if not hooked then
                 hooked = true
@@ -240,12 +240,12 @@ function Container:Toggle(opts)
 
     -- Submenu (ícone de ajustes)
     if type(opts.Settings) == "function" then
-        local gear = create("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -(12 + 34 + 6), 0.5, 0), Size = UDim2.fromOffset(26, 26),
-            BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 3 }, row)
-        local gi = icon(gear, opts.SettingsIcon or "sliders-horizontal", 17, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 3 })
+        local gear = create("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -(12 + 44 + 6), 0.5, 0), Size = UDim2.fromOffset(44, 44),
+            BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 4, Active = true, Selectable = true }, row)
+        local gi = icon(gear, opts.SettingsIcon or "sliders-horizontal", 20, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 4 })
         local sub, panel = subPanel(self, outer, 2)
         local open = false
-        gear.MouseButton1Click:Connect(function()
+        gear.Activated:Connect(function()
             open = not open
             panel.Visible = open
             gi.ImageColor3 = open and Library.Theme.Accent or Library.Theme.Text

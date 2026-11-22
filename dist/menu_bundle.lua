@@ -2119,6 +2119,9 @@ function Protection.init(config)
     Protection._initialized = true
     secureLog(1, "Protection layer fully initialized")
 
+    -- Register ESP features so toggles work immediately at startup
+    task.defer(function() Protection.registerESPFeatures() end)
+
     return {
         executor = Protection.Executor,
         executorVersion = Protection.ExecutorVersion,
@@ -2575,9 +2578,43 @@ function Protection.registerESPFeatures()
     Library.Features = Library.Features or {}
     Library.ESP = Library.ESP or {}
     
+    -- Initialize default ESP config for all kinds at startup (so toggle works without opening settings first)
+    local defaultESPConfig = {
+        highlight = { on = true, color = Color3.fromRGB(245, 160, 30), alpha = 0.6, outline = 2 },
+        box = { on = true, color = Color3.fromRGB(215, 215, 215), thick = 1, style = "Completa", corner = 14, alpha = 0.5 },
+        name = { on = true, color = Color3.fromRGB(235, 235, 235) },
+        healthbar = { on = true, auto = true, color = Color3.fromRGB(45, 205, 190), width = 2, side = "Esquerda" },
+        health = { on = true, color = Color3.fromRGB(70, 220, 90) },
+        distance = { on = true, color = Color3.fromRGB(235, 235, 235), unit = "m" },
+        kdr = { on = false, color = Color3.fromRGB(255, 200, 90) },
+        reports = { on = false, color = Color3.fromRGB(255, 140, 90) },
+        tracers = { on = false, color = Color3.fromRGB(255, 255, 255), thick = 1, origin = "Baixo" },
+        arrows = { on = false, color = Color3.fromRGB(255, 90, 90), size = 18 },
+        skeleton = { on = false, color = Color3.fromRGB(255, 255, 255), thick = 1.5 },
+        frozen = false, locked = false,
+        lod = { on = true, near = 150 }, nearest = { on = false, color = Color3.fromRGB(255, 60, 60) },
+        maxDist = 1000, textSize = 10, prevDist = 120, prevHp = 100,
+    }
+    
+    local npcConfig = {}
+    for k, v in pairs(defaultESPConfig) do npcConfig[k] = v end
+    npcConfig.highlight.color = Color3.fromRGB(240, 95, 95)
+    
+    for _, kind in ipairs({ "Jogador", "Corpo", "Recipiente", "Item no chão", "Itens de missão" }) do
+        if not Library.ESP[kind] then
+            Library.ESP[kind] = {}
+            for k, v in pairs(defaultESPConfig) do Library.ESP[kind][k] = v end
+        end
+    end
+    if not Library.ESP["NPCs"] then
+        Library.ESP["NPCs"] = {}
+        for k, v in pairs(npcConfig) do Library.ESP["NPCs"][k] = v end
+    end
+    
     local function toggleESP(kind, enabled)
         local S = Library.ESP and Library.ESP[kind]
         if S then S.highlight.on = enabled; S.box.on = enabled; S.name.on = enabled end
+        print("[BBC][ESP] Toggle " .. kind .. ":", enabled)
         if enabled then Protection.startESPEngine() end
     end
     
@@ -3074,12 +3111,12 @@ function Container:Toggle(opts)
 
     -- Modal (painel grande)
     if type(opts.Modal) == "function" then
-        local gear = create("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -(12 + 34 + 6), 0.5, 0), Size = UDim2.fromOffset(26, 26),
-            BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 3 }, row)
-        local gi = icon(gear, "sliders-horizontal", 17, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 3 })
+        local gear = create("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -(12 + 44 + 6), 0.5, 0), Size = UDim2.fromOffset(44, 44),
+            BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 4, Active = true, Selectable = true }, row)
+        local gi = icon(gear, "sliders-horizontal", 20, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 4 })
         local key = (self._path or "") .. "/" .. tostring(opts.Name)
         local hooked = false
-        gear.MouseButton1Click:Connect(function()
+        gear.Activated:Connect(function()
             local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal)
             if not hooked then
                 hooked = true
@@ -3096,12 +3133,12 @@ function Container:Toggle(opts)
 
     -- Submenu (ícone de ajustes)
     if type(opts.Settings) == "function" then
-        local gear = create("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -(12 + 34 + 6), 0.5, 0), Size = UDim2.fromOffset(26, 26),
-            BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 3 }, row)
-        local gi = icon(gear, opts.SettingsIcon or "sliders-horizontal", 17, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 3 })
+        local gear = create("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -(12 + 44 + 6), 0.5, 0), Size = UDim2.fromOffset(44, 44),
+            BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 4, Active = true, Selectable = true }, row)
+        local gi = icon(gear, opts.SettingsIcon or "sliders-horizontal", 20, "Text", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 4 })
         local sub, panel = subPanel(self, outer, 2)
         local open = false
-        gear.MouseButton1Click:Connect(function()
+        gear.Activated:Connect(function()
             open = not open
             panel.Visible = open
             gi.ImageColor3 = open and Library.Theme.Accent or Library.Theme.Text
@@ -5294,27 +5331,7 @@ end
 local function buildEspPanel(kind)
     return function(m)
         local Library = BBC.Library
-        local S = Library.ESP and Library.ESP[kind] or {}
-        if not next(S) then
-            S = {
-                highlight = { on = true, color = kind == "NPCs" and Color3.fromRGB(240, 95, 95) or Color3.fromRGB(245, 160, 30), alpha = 0.6, outline = 2 },
-                box = { on = true, color = Color3.fromRGB(215, 215, 215), thick = 1, style = "Completa", corner = 14, alpha = 0.5 },
-                name = { on = true, color = Color3.fromRGB(235, 235, 235) },
-                healthbar = { on = true, auto = true, color = Color3.fromRGB(45, 205, 190), width = 2, side = "Esquerda" },
-                health = { on = true, color = Color3.fromRGB(70, 220, 90) },
-                distance = { on = true, color = Color3.fromRGB(235, 235, 235), unit = "m" },
-                kdr = { on = false, color = Color3.fromRGB(255, 200, 90) },
-                reports = { on = false, color = Color3.fromRGB(255, 140, 90) },
-                tracers = { on = false, color = Color3.fromRGB(255, 255, 255), thick = 1, origin = "Baixo" },
-                arrows = { on = false, color = Color3.fromRGB(255, 90, 90), size = 18 },
-                skeleton = { on = false, color = Color3.fromRGB(255, 255, 255), thick = 1.5 },
-                frozen = false, locked = false,
-                lod = { on = true, near = 150 }, nearest = { on = false, color = Color3.fromRGB(255, 60, 60) },
-                maxDist = 1000, textSize = 10, prevDist = 120, prevHp = 100,
-            }
-            Library.ESP = Library.ESP or {}
-            Library.ESP[kind] = S
-        end
+        local S = Library.ESP and Library.ESP[kind]
 
         local L = m.Left
         local R = m.Right

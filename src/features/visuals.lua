@@ -529,27 +529,7 @@ end
 local function buildEspPanel(kind)
     return function(m)
         local Library = BBC.Library
-        local S = Library.ESP and Library.ESP[kind] or {}
-        if not next(S) then
-            S = {
-                highlight = { on = true, color = kind == "NPCs" and Color3.fromRGB(240, 95, 95) or Color3.fromRGB(245, 160, 30), alpha = 0.6, outline = 2 },
-                box = { on = true, color = Color3.fromRGB(215, 215, 215), thick = 1, style = "Completa", corner = 14, alpha = 0.5 },
-                name = { on = true, color = Color3.fromRGB(235, 235, 235) },
-                healthbar = { on = true, auto = true, color = Color3.fromRGB(45, 205, 190), width = 2, side = "Esquerda" },
-                health = { on = true, color = Color3.fromRGB(70, 220, 90) },
-                distance = { on = true, color = Color3.fromRGB(235, 235, 235), unit = "m" },
-                kdr = { on = false, color = Color3.fromRGB(255, 200, 90) },
-                reports = { on = false, color = Color3.fromRGB(255, 140, 90) },
-                tracers = { on = false, color = Color3.fromRGB(255, 255, 255), thick = 1, origin = "Baixo" },
-                arrows = { on = false, color = Color3.fromRGB(255, 90, 90), size = 18 },
-                skeleton = { on = false, color = Color3.fromRGB(255, 255, 255), thick = 1.5 },
-                frozen = false, locked = false,
-                lod = { on = true, near = 150 }, nearest = { on = false, color = Color3.fromRGB(255, 60, 60) },
-                maxDist = 1000, textSize = 10, prevDist = 120, prevHp = 100,
-            }
-            Library.ESP = Library.ESP or {}
-            Library.ESP[kind] = S
-        end
+        local S = Library.ESP and Library.ESP[kind]
 
         local L = m.Left
         local R = m.Right
