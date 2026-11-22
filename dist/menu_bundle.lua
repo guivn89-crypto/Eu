@@ -6174,6 +6174,7 @@ __module("main", function(BBC)
 local Library = BBC.Library or {}
 local Utils = BBC.Utils or {}
 local Security = BBC.Security or { init = function() end }
+local Protection = BBC.Protection or { init = function() end }
 local UI = BBC.UI or { Controls = { T = function() end, S = function() end } }
 local Controls = UI.Controls or { T = function() end, S = function() end }
 local T = Controls.T
