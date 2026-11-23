@@ -5665,7 +5665,6 @@ local markHolder: any = nil
 local started = false
 local registered = false
 local stopped = false
-local bindCloseRegistered = false
 local errorCount = 0
 local renderConnection: any = nil
 local unsubscribeConfig: (() -> ())? = nil
@@ -6414,11 +6413,15 @@ function Engine.start()
     markHolder = make("Folder", { Name = "BBCMarks" }, Workspace)
 
     runtime = ESPRuntime.new()
-    if not bindCloseRegistered and game.BindToClose then
-        bindCloseRegistered = true
-        game:BindToClose(function()
+    -- BindToClose é exclusivo do servidor; no cliente (Delta/UNC) use
+    -- eventos de ciclo de vida do cliente, protegidos com pcall.
+    local okClose, closeConn = pcall(function()
+        return espGui.Destroying:Connect(function()
             Engine.stop()
         end)
+    end)
+    if not okClose then
+        warn("[BBC][ESP] falha ao registrar limpeza do cliente: " .. tostring(closeConn))
     end
     started = true
     stopped = false
