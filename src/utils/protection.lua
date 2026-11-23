@@ -1662,6 +1662,7 @@ function Protection.startESPEngine()
                 d.hbFill.Size = UDim2.fromScale(1, ratio); d.hbFill.BackgroundColor3 = hpColor(S, ratio)
             end
             if S.health.on then
+                -- Número de vida é secundário (mín. 9px) e fica colado na barra de 2px.
                 d.hp.Visible = true; d.hp.Text = tostring(math.floor(t.hum.Health)); d.hp.TextSize = math.max(ts-2,9)
                 d.hp.TextColor3 = (S.healthbar.auto and ratio <= 0.6) and hpColor(S, ratio) or S.health.color
                 d.hp.Position = UDim2.fromOffset(left - 5 - (S.healthbar.on and S.healthbar.width or 0), (top+bottom)/2)
@@ -1681,6 +1682,8 @@ function Protection.startESPEngine()
                 d.name.Position = UDim2.fromOffset(nameX, top - 2)
             end
             if S.distance.on then
+                -- Hierarquia de texto: nome/distância são primários (mín. 12px),
+                -- o número de vida é secundário (mín. 9px) para não competir com o nome.
                 d.dist.Visible = true; d.dist.Text = distText; d.dist.TextSize = math.max(ts-1,12); d.dist.TextColor3 = S.distance.color
                 d.dist.Size = UDim2.fromOffset(120, 14)
                 local distX = cx - d.dist.TextBounds.X / 2

@@ -164,7 +164,9 @@ local function SetupCharacterPreview(previewContainer)
     -- Skeleton Lines
     local skeletonLines = {}
 
-    -- Joint positions (relative to holder scale 0-1)
+    -- Juntas do esqueleto em escala 0-1 do holder (mesma base das partes do boneco).
+    -- Cada valor aponta para o CENTRO da articulação correspondente: pescoço na emenda
+    -- cabeça/tronco, mãos no centro dos braços, pés no centro das pernas.
     local joints = {
         HeadTop     = Vector2.new(0.5, 0.02),
         Neck        = Vector2.new(0.5, 0.21),
@@ -565,7 +567,9 @@ local function buildEspPanel(kind)
             { key = "healthbar", label = "Barra vida", setter = function(v) previewController.SetHealthBar(v) end },
             { key = "health", label = "Vida", setter = function(v) previewController.SetHealth(v) end },
             { key = "distance", label = "Distância", setter = function(v) previewController.SetDistance(v) end },
-            -- "Linhas" (tracers) só existe no jogo: a flag S.tracers.on já é escrita pelo handler abaixo
+            -- "Linhas" (tracers): a prévia NÃO desenha tracer (overlay preso ao personagem),
+            -- então o botão só aciona a flag S.tracers.on do ESP no jogo — o handler abaixo
+            -- já escreve essa flag e o próprio botão reflete o estado (Accent quando ligado).
             { key = "tracers", label = "Linhas" },
             { key = "skeleton", label = "Esqueleto", setter = function(v) previewController.SetSkeleton(v) end },
         }

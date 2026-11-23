@@ -345,6 +345,9 @@ function Container:Toggle(opts)
     if type(opts.Modal) == "function" then
         local key = (self._path or "") .. "/" .. tostring(opts.Name)
         local hooked = false
+        -- Declarado antes e atribuído depois (em vez de `local modalBtn = createGearButton(...)`)
+        -- porque o callback referencia a própria variável; assim o analisador estático
+        -- enxerga o uso e não reporta "unused local".
         local modalBtn = nil
         modalBtn = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
             local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras)

@@ -2374,6 +2374,7 @@ function Protection.startESPEngine()
                 d.hbFill.Size = UDim2.fromScale(1, ratio); d.hbFill.BackgroundColor3 = hpColor(S, ratio)
             end
             if S.health.on then
+                -- Número de vida é secundário (mín. 9px) e fica colado na barra de 2px.
                 d.hp.Visible = true; d.hp.Text = tostring(math.floor(t.hum.Health)); d.hp.TextSize = math.max(ts-2,9)
                 d.hp.TextColor3 = (S.healthbar.auto and ratio <= 0.6) and hpColor(S, ratio) or S.health.color
                 d.hp.Position = UDim2.fromOffset(left - 5 - (S.healthbar.on and S.healthbar.width or 0), (top+bottom)/2)
@@ -2393,6 +2394,8 @@ function Protection.startESPEngine()
                 d.name.Position = UDim2.fromOffset(nameX, top - 2)
             end
             if S.distance.on then
+                -- Hierarquia de texto: nome/distância são primários (mín. 12px),
+                -- o número de vida é secundário (mín. 9px) para não competir com o nome.
                 d.dist.Visible = true; d.dist.Text = distText; d.dist.TextSize = math.max(ts-1,12); d.dist.TextColor3 = S.distance.color
                 d.dist.Size = UDim2.fromOffset(120, 14)
                 local distX = cx - d.dist.TextBounds.X / 2
@@ -3249,6 +3252,9 @@ function Container:Toggle(opts)
     if type(opts.Modal) == "function" then
         local key = (self._path or "") .. "/" .. tostring(opts.Name)
         local hooked = false
+        -- Declarado antes e atribuído depois (em vez de `local modalBtn = createGearButton(...)`)
+        -- porque o callback referencia a própria variável; assim o analisador estático
+        -- enxerga o uso e não reporta "unused local".
         local modalBtn = nil
         modalBtn = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
             local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras)
@@ -5175,7 +5181,9 @@ local function SetupCharacterPreview(previewContainer)
     -- Skeleton Lines
     local skeletonLines = {}
 
-    -- Joint positions (relative to holder scale 0-1)
+    -- Juntas do esqueleto em escala 0-1 do holder (mesma base das partes do boneco).
+    -- Cada valor aponta para o CENTRO da articulação correspondente: pescoço na emenda
+    -- cabeça/tronco, mãos no centro dos braços, pés no centro das pernas.
     local joints = {
         HeadTop     = Vector2.new(0.5, 0.02),
         Neck        = Vector2.new(0.5, 0.21),
@@ -5576,7 +5584,9 @@ local function buildEspPanel(kind)
             { key = "healthbar", label = "Barra vida", setter = function(v) previewController.SetHealthBar(v) end },
             { key = "health", label = "Vida", setter = function(v) previewController.SetHealth(v) end },
             { key = "distance", label = "Distância", setter = function(v) previewController.SetDistance(v) end },
-            -- "Linhas" (tracers) só existe no jogo: a flag S.tracers.on já é escrita pelo handler abaixo
+            -- "Linhas" (tracers): a prévia NÃO desenha tracer (overlay preso ao personagem),
+            -- então o botão só aciona a flag S.tracers.on do ESP no jogo — o handler abaixo
+            -- já escreve essa flag e o próprio botão reflete o estado (Accent quando ligado).
             { key = "tracers", label = "Linhas" },
             { key = "skeleton", label = "Esqueleto", setter = function(v) previewController.SetSkeleton(v) end },
         }
