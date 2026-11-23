@@ -707,6 +707,837 @@ return InitUtils
 end)
 
 -- ============================================================
+-- módulo: utils.esp_config  (utils/esp_config.lua)
+-- ============================================================
+__module("utils.esp_config", function(BBC)
+--!strict
+--[[
+    BBC HUB - ESP configuration
+    Defaults, validation, change events and pure target-filter helpers.
+]]
+
+local ESPConfig = {}
+
+local KINDS = { "Jogador", "NPCs", "Corpo", "Recipiente", "Item no chão", "Itens de missão" }
+local listeners = {}
+local activeLibrary = nil
+
+local function rgb(red, green, blue)
+    if type(Color3) == "table" and type(Color3.fromRGB) == "function" then
+        return Color3.fromRGB(red, green, blue)
+    end
+    return { R = red / 255, G = green / 255, B = blue / 255 }
+end
+
+local ORANGE = rgb(255, 130, 0)
+local BLACK = rgb(0, 0, 0)
+local WHITE = rgb(242, 242, 242)
+local CYAN = rgb(45, 205, 190)
+local GREEN = rgb(70, 220, 90)
+
+local function cloneValue(value)
+    if type(value) ~= "table" then
+        return value
+    end
+    local copy = {}
+    for key, item in pairs(value) do
+        copy[key] = cloneValue(item)
+    end
+    return copy
+end
+
+local function mergeDefaults(target, defaults)
+    for key, value in pairs(defaults) do
+        if type(value) == "table" then
+            if type(target[key]) ~= "table" then
+                target[key] = {}
+            end
+            mergeDefaults(target[key], value)
+        elseif target[key] == nil then
+            target[key] = cloneValue(value)
+        end
+    end
+    return target
+end
+
+local function needsDefaults(target, defaults)
+    for key, value in pairs(defaults) do
+        if type(value) == "table" then
+            if type(target[key]) ~= "table" or needsDefaults(target[key], value) then
+                return true
+            end
+        elseif target[key] == nil then
+            return true
+        end
+    end
+    return false
+end
+
+local function newDefaults()
+    return {
+        enabled = false,
+        maxDist = 1000,
+        teamCheck = false,
+        ignoreDead = true,
+        rainbow = false,
+        primaryColor = ORANGE,
+        textSize = 12,
+        prevDist = 1133,
+        prevHp = 100,
+        frozen = false,
+        locked = false,
+        highlight = {
+            on = false,
+            color = ORANGE,
+            fillTransparency = 0.55,
+            outlineTransparency = 0,
+            outlineColor = BLACK,
+        },
+        box = {
+            on = false,
+            color = WHITE,
+            thick = 1,
+            style = "Completa",
+            corner = 14,
+            alpha = 0.5,
+        },
+        name = {
+            on = false,
+            color = WHITE,
+            size = 12,
+            outline = true,
+        },
+        healthbar = {
+            on = false,
+            auto = true,
+            color = CYAN,
+            width = 4,
+            side = "Esquerda",
+        },
+        health = {
+            on = false,
+            color = GREEN,
+            size = 11,
+        },
+        distance = {
+            on = false,
+            color = WHITE,
+            unit = "m",
+            size = 12,
+            outline = true,
+        },
+        tracers = {
+            on = false,
+            color = WHITE,
+            thick = 1,
+            origin = "Baixo",
+        },
+        skeleton = {
+            on = false,
+            color = WHITE,
+            thick = 1.5,
+        },
+        lod = {
+            on = true,
+            near = 150,
+        },
+        nearest = {
+            on = false,
+            color = rgb(255, 60, 60),
+        },
+    }
+end
+
+local NUMBER_LIMITS = {
+    maxDist = { 100, 5000 },
+    textSize = { 8, 20 },
+    prevDist = { 10, 5000 },
+    prevHp = { 0, 100 },
+    fillTransparency = { 0, 1 },
+    outlineTransparency = { 0, 1 },
+    alpha = { 0, 1 },
+    thick = { 1, 4 },
+    corner = { 4, 30 },
+    width = { 2, 10 },
+    size = { 8, 20 },
+    near = { 20, 1000 },
+}
+
+local BOOLEAN_KEYS = {
+    enabled = true,
+    on = true,
+    auto = true,
+    teamCheck = true,
+    ignoreDead = true,
+    rainbow = true,
+    frozen = true,
+    locked = true,
+}
+
+local ALLOWED_VALUES = {
+    style = { Completa = true, Cantos = true },
+    side = { Esquerda = true, Direita = true },
+    unit = { m = true, studs = true },
+    origin = { Baixo = true, Centro = true, Topo = true, Cima = true },
+}
+
+local ALLOWED_PATHS = {}
+local function allow(path)
+    ALLOWED_PATHS[path] = true
+end
+
+for _, path in ipairs({
+    "enabled", "maxDist", "teamCheck", "ignoreDead", "rainbow", "primaryColor",
+    "textSize", "prevDist", "prevHp", "frozen", "locked",
+}) do
+    allow(path)
+end
+
+for _, group in ipairs({
+    { "highlight", { "on", "color", "fillTransparency", "outlineTransparency", "outlineColor" } },
+    { "box", { "on", "color", "thick", "style", "corner", "alpha" } },
+    { "name", { "on", "color", "size", "outline" } },
+    { "healthbar", { "on", "auto", "color", "width", "side" } },
+    { "health", { "on", "color", "size" } },
+    { "distance", { "on", "color", "unit", "size", "outline" } },
+    { "tracers", { "on", "color", "thick", "origin" } },
+    { "skeleton", { "on", "color", "thick" } },
+    { "lod", { "on", "near" } },
+    { "nearest", { "on", "color" } },
+}) do
+    for _, key in ipairs(group[2]) do
+        allow(group[1] .. "." .. key)
+    end
+end
+
+local function clamp(value, minimum, maximum)
+    if value < minimum then return minimum end
+    if value > maximum then return maximum end
+    return value
+end
+
+local function isColor(value)
+    local valueType = type(value)
+    if valueType ~= "table" and valueType ~= "userdata" then
+        return false
+    end
+    return type(value.R) == "number"
+        and type(value.G) == "number"
+        and type(value.B) == "number"
+end
+
+local function isFiniteNumber(value)
+    return type(value) == "number"
+        and value == value
+        and value ~= math.huge
+        and value ~= -math.huge
+end
+
+local function colorsEqual(left, right)
+    if left == right then return true end
+    if not isColor(left) or not isColor(right) then return false end
+    return math.abs(left.R - right.R) < 0.0001
+        and math.abs(left.G - right.G) < 0.0001
+        and math.abs(left.B - right.B) < 0.0001
+end
+
+local function valuesEqual(left, right)
+    if type(left) == "number" and type(right) == "number" then
+        return math.abs(left - right) < 0.000001
+    end
+    if isColor(left) and isColor(right) then
+        return colorsEqual(left, right)
+    end
+    return left == right
+end
+
+local function pathParts(path)
+    local parts = {}
+    for part in string.gmatch(tostring(path or ""), "[^%.]+") do
+        parts[#parts + 1] = part
+    end
+    return parts
+end
+
+local function readPath(root, parts)
+    local current = root
+    for _, part in ipairs(parts) do
+        if type(current) ~= "table" then
+            return nil
+        end
+        current = current[part]
+        if current == nil then
+            return nil
+        end
+    end
+    return current
+end
+
+local function writePath(root, parts, value)
+    local current = root
+    for index = 1, #parts - 1 do
+        local part = parts[index]
+        if type(current[part]) ~= "table" then
+            current[part] = {}
+        end
+        current = current[part]
+    end
+    current[parts[#parts]] = value
+end
+
+local function validateValue(parts, value)
+    local path = table.concat(parts, ".")
+    local key = parts[#parts]
+
+    -- `outline` is numeric only for the legacy Chams thickness field. On name
+    -- and distance labels it is a boolean outline switch.
+    if path == "name.outline" or path == "distance.outline" then
+        return type(value) == "boolean" and value or nil
+    end
+
+    if BOOLEAN_KEYS[key] then
+        return type(value) == "boolean" and value or nil
+    end
+
+    local limits = NUMBER_LIMITS[key]
+    if limits then
+        if not isFiniteNumber(value) then
+            return nil
+        end
+        return clamp(value, limits[1], limits[2])
+    end
+
+    local allowed = ALLOWED_VALUES[key]
+    if allowed then
+        return type(value) == "string" and allowed[value] and value or nil
+    end
+
+    if key == "color" or key == "outlineColor" or key == "primaryColor" then
+        return isColor(value) and value or nil
+    end
+
+    return value
+end
+
+local function emit(kind, path, value, oldValue)
+    for index = #listeners, 1, -1 do
+        local listener = listeners[index]
+        if listener then
+            local ok, err = pcall(listener.callback, kind, path, value, oldValue)
+            if not ok then
+                warn("[BBC][ESPConfig] listener failed: " .. tostring(err))
+            end
+        end
+    end
+end
+
+function ESPConfig.ensureDefaults(library)
+    library = library or (type(BBC) == "table" and BBC.Library or nil)
+    if type(library) ~= "table" then
+        return {}
+    end
+    activeLibrary = library
+
+    if type(library.ESP) ~= "table" then
+        library.ESP = {}
+        if type(BBC) == "table" then
+            BBC.ESP = library.ESP
+        end
+    end
+
+    for _, kind in ipairs(KINDS) do
+        local current = type(library.ESP[kind]) == "table" and library.ESP[kind] or {}
+        if needsDefaults(current, newDefaults()) then
+            library.ESP[kind] = mergeDefaults(cloneValue(current), newDefaults())
+        end
+    end
+
+    return library.ESP
+end
+
+function ESPConfig.get(kind, path, fallback)
+    local library = activeLibrary or (type(BBC) == "table" and BBC.Library or nil)
+    local settings = library and library.ESP and library.ESP[kind]
+    if type(settings) ~= "table" then
+        return fallback
+    end
+    local value = readPath(settings, pathParts(path))
+    if value == nil then
+        return fallback
+    end
+    return value
+end
+
+function ESPConfig.set(kind, path, value)
+    local library = activeLibrary or (type(BBC) == "table" and BBC.Library or nil)
+    local settings = library and library.ESP and library.ESP[kind]
+    if type(settings) ~= "table" then
+        return nil
+    end
+
+    local parts = pathParts(path)
+    if #parts == 0 then
+        return nil
+    end
+
+    local normalizedPath = table.concat(parts, ".")
+    if not ALLOWED_PATHS[normalizedPath] then
+        return nil
+    end
+
+    local validated = validateValue(parts, value)
+    if validated == nil then
+        return nil
+    end
+
+    local oldValue = readPath(settings, parts)
+    if oldValue ~= nil and valuesEqual(oldValue, validated) then
+        return validated
+    end
+
+    local updated = cloneValue(settings)
+    writePath(updated, parts, validated)
+    library.ESP[kind] = updated
+    emit(kind, normalizedPath, validated, oldValue)
+    return validated
+end
+
+function ESPConfig.setMany(kind, values)
+    if type(values) ~= "table" then
+        return
+    end
+
+    local library = activeLibrary or (type(BBC) == "table" and BBC.Library or nil)
+    local settings = library and library.ESP and library.ESP[kind]
+    if type(settings) ~= "table" then
+        return
+    end
+
+    local paths = {}
+    for path in pairs(values) do
+        paths[#paths + 1] = path
+    end
+    table.sort(paths)
+
+    local updated = cloneValue(settings)
+    local changes = {}
+    for _, path in ipairs(paths) do
+        local parts = pathParts(path)
+        local normalizedPath = table.concat(parts, ".")
+        if #parts > 0 and ALLOWED_PATHS[normalizedPath] then
+            local validated = validateValue(parts, values[path])
+            if validated ~= nil then
+                local oldValue = readPath(updated, parts)
+                if oldValue == nil or not valuesEqual(oldValue, validated) then
+                    writePath(updated, parts, validated)
+                    changes[#changes + 1] = { path = normalizedPath, value = validated, oldValue = oldValue }
+                end
+            end
+        end
+    end
+
+    if #changes == 0 then
+        return
+    end
+    library.ESP[kind] = updated
+    for _, change in ipairs(changes) do
+        emit(kind, change.path, change.value, change.oldValue)
+    end
+end
+
+function ESPConfig.onChange(callback)
+    if type(callback) ~= "function" then
+        return function() end
+    end
+
+    local listener = { callback = callback }
+    listeners[#listeners + 1] = listener
+    return function()
+        for index = #listeners, 1, -1 do
+            if listeners[index] == listener then
+                table.remove(listeners, index)
+                break
+            end
+        end
+    end
+end
+
+function ESPConfig.applyPrimaryColor(kind, color)
+    if not isColor(color) then
+        return false
+    end
+
+    ESPConfig.setMany(kind, {
+        ["primaryColor"] = color,
+        ["highlight.color"] = color,
+        ["box.color"] = color,
+        ["name.color"] = color,
+        ["distance.color"] = color,
+        ["tracers.color"] = color,
+        ["skeleton.color"] = color,
+    })
+    return true
+end
+
+function ESPConfig.snapshot(kind)
+    local library = activeLibrary or (type(BBC) == "table" and BBC.Library or nil)
+    local settings = library and library.ESP and library.ESP[kind]
+    return type(settings) == "table" and cloneValue(settings) or {}
+end
+
+function ESPConfig.isPlayerOwnedCharacter(character, players)
+    if character == nil or type(players) ~= "table" then
+        return false
+    end
+    local ok, player = pcall(function()
+        return players:GetPlayerFromCharacter(character)
+    end)
+    return ok and player ~= nil
+end
+
+function ESPConfig.shouldIncludeTarget(target, localPlayer, settings)
+    if type(target) ~= "table" or type(settings) ~= "table" then
+        return false
+    end
+
+    local humanoid = target.humanoid or target.hum
+    if humanoid == nil then
+        return false
+    end
+
+    if settings.ignoreDead and humanoid.Health <= 0 then
+        return false
+    end
+
+    if settings.teamCheck then
+        local targetPlayer = target.player
+        local localTeam = localPlayer and localPlayer.Team
+        local targetTeam = targetPlayer and targetPlayer.Team
+        if localTeam ~= nil and targetTeam ~= nil then
+            local sameTeam = localTeam == targetTeam
+            if not sameTeam and type(localTeam.Name) == "string" and type(targetTeam.Name) == "string" then
+                sameTeam = localTeam.Name == targetTeam.Name
+            end
+            if sameTeam then
+                return false
+            end
+        end
+    end
+
+    return true
+end
+
+ESPConfig.KINDS = KINDS
+ESPConfig.defaults = newDefaults
+
+if type(BBC) == "table" and type(BBC.Library) == "table" then
+    ESPConfig.ensureDefaults(BBC.Library)
+end
+
+return ESPConfig
+
+end)
+
+-- ============================================================
+-- módulo: utils.esp_logic  (utils/esp_logic.lua)
+-- ============================================================
+__module("utils.esp_logic", function(BBC)
+--!strict
+--[[
+    BBC HUB - Pure ESP candidate logic
+    Keeps deduplication, ordering and feature-state transitions independent
+    from Roblox instances so they can be tested headlessly.
+]]
+
+local ESPLogic = {}
+
+local FEATURE_KEYS = {
+    highlight = true,
+    box = true,
+    name = true,
+    healthbar = true,
+    health = true,
+    distance = true,
+    tracers = true,
+    skeleton = true,
+}
+
+local function cloneValue(value)
+    if type(value) ~= "table" then
+        return value
+    end
+    local copy = {}
+    for key, item in pairs(value) do
+        copy[key] = cloneValue(item)
+    end
+    return copy
+end
+
+local function stableId(candidate)
+    if type(candidate) ~= "table" then
+        return ""
+    end
+    if type(candidate.stableId) == "string" then
+        return candidate.stableId
+    end
+    local model = candidate.model
+    if type(model) == "table" and type(model.Name) == "string" then
+        return model.Name
+    end
+    return tostring(model)
+end
+
+function ESPLogic.setEspFlag(config, key, enabled)
+    if type(config) ~= "table" or type(key) ~= "string" then
+        return nil
+    end
+
+    local updated = cloneValue(config)
+    if key == "enabled" then
+        updated.enabled = enabled == true
+        return updated
+    end
+
+    if not FEATURE_KEYS[key] or type(updated[key]) ~= "table" then
+        return nil
+    end
+    updated[key].on = enabled == true
+    return updated
+end
+
+function ESPLogic.reconcileCandidates(playerCandidates, npcCandidates, localCharacter)
+    local byModel = {}
+    local order = {}
+
+    local function add(candidate, kind)
+        if type(candidate) ~= "table" then
+            return
+        end
+        local model = candidate.model
+        if model == nil or model == localCharacter then
+            return
+        end
+
+        local existing = byModel[model]
+        if existing == nil then
+            order[#order + 1] = model
+            byModel[model] = { kind = kind, candidate = candidate }
+        elseif kind == "Jogador" then
+            -- Player classification always wins over an NPC classification.
+            existing.kind = kind
+            existing.candidate = candidate
+        end
+    end
+
+    for _, candidate in ipairs(npcCandidates or {}) do
+        add(candidate, "NPCs")
+    end
+    for _, candidate in ipairs(playerCandidates or {}) do
+        add(candidate, "Jogador")
+    end
+
+    local result = {}
+    for _, model in ipairs(order) do
+        result[#result + 1] = byModel[model]
+    end
+    return result
+end
+
+function ESPLogic.scaledTextSize(settings, featureSize)
+    local baseSize = tonumber(type(settings) == "table" and settings.textSize or nil) or 12
+    local size = tonumber(featureSize) or baseSize
+    local scaled = size * (baseSize / 12)
+    return math.max(8, math.min(24, scaled))
+end
+
+function ESPLogic.selectTargets(candidates, limit)
+    local selected = {}
+    for _, candidate in ipairs(candidates or {}) do
+        selected[#selected + 1] = candidate
+    end
+
+    table.sort(selected, function(left, right)
+        local leftDistance = tonumber(left.distance)
+            or tonumber(left.m)
+            or tonumber(left.studs)
+            or math.huge
+        local rightDistance = tonumber(right.distance)
+            or tonumber(right.m)
+            or tonumber(right.studs)
+            or math.huge
+        if leftDistance ~= rightDistance then
+            return leftDistance < rightDistance
+        end
+        return stableId(left) < stableId(right)
+    end)
+
+    local maximum = math.max(0, math.floor(tonumber(limit) or 0))
+    local result = {}
+    for index = 1, math.min(#selected, maximum) do
+        result[#result + 1] = selected[index]
+    end
+    return result
+end
+
+ESPLogic.FEATURE_KEYS = FEATURE_KEYS
+
+return ESPLogic
+
+end)
+
+-- ============================================================
+-- módulo: utils.esp_runtime  (utils/esp_runtime.lua)
+-- ============================================================
+__module("utils.esp_runtime", function(BBC)
+--!strict
+--[[
+    BBC HUB - Pure ESP runtime registry
+    Owns one drawing record and at most one Highlight per character model.
+]]
+
+local ESPRuntime = {}
+ESPRuntime.__index = ESPRuntime
+
+function ESPRuntime.new()
+    return setmetatable({
+        records = {},
+        highlights = {},
+    }, ESPRuntime)
+end
+
+function ESPRuntime:register(model, kind, drawing)
+    if model == nil or drawing == nil then
+        return nil, false
+    end
+
+    local existing = self.records[model]
+    if existing ~= nil then
+        -- A model can be reclassified from NPC to player between scans.
+        existing.kind = kind
+        return existing.drawing, false
+    end
+
+    self.records[model] = { kind = kind, drawing = drawing }
+    return drawing, true
+end
+
+function ESPRuntime:getDrawing(model)
+    local record = self.records[model]
+    return record and record.drawing or nil
+end
+
+function ESPRuntime:ensureHighlight(model, factory)
+    if model == nil then
+        return nil
+    end
+
+    local existing = self.highlights[model]
+    if existing ~= nil then
+        return existing
+    end
+
+    local highlight = factory()
+    if highlight ~= nil then
+        self.highlights[model] = highlight
+    end
+    return highlight
+end
+
+function ESPRuntime:hideKind(kind)
+    for _, record in pairs(self.records) do
+        if record.kind == kind and type(record.drawing.hideAll) == "function" then
+            record.drawing:hideAll()
+        end
+    end
+end
+
+function ESPRuntime:hideFeature(kind, feature)
+    for _, record in pairs(self.records) do
+        if record.kind == kind and type(record.drawing.hideFeature) == "function" then
+            record.drawing:hideFeature(feature)
+        end
+    end
+end
+
+function ESPRuntime:forEachKind(kind, callback)
+    for _, record in pairs(self.records) do
+        if record.kind == kind then
+            callback(record.drawing)
+        end
+    end
+end
+
+function ESPRuntime:release(model)
+    local record = self.records[model]
+    if record ~= nil then
+        if type(record.drawing.destroy) == "function" then
+            record.drawing:destroy()
+        end
+        self.records[model] = nil
+    end
+
+    local highlight = self.highlights[model]
+    if highlight ~= nil then
+        if type(highlight.Destroy) == "function" then
+            highlight:Destroy()
+        elseif type(highlight.destroy) == "function" then
+            highlight:destroy()
+        end
+        self.highlights[model] = nil
+    end
+end
+
+function ESPRuntime:releaseKind(kind)
+    local models = {}
+    for model, record in pairs(self.records) do
+        if record.kind == kind then
+            models[#models + 1] = model
+        end
+    end
+    for _, model in ipairs(models) do
+        self:release(model)
+    end
+end
+
+function ESPRuntime:destroyAll()
+    local models = {}
+    for model in pairs(self.records) do
+        models[#models + 1] = model
+    end
+    for _, model in ipairs(models) do
+        self:release(model)
+    end
+
+    local highlighted = {}
+    for model in pairs(self.highlights) do
+        highlighted[#highlighted + 1] = model
+    end
+    for _, model in ipairs(highlighted) do
+        self:release(model)
+    end
+end
+
+function ESPRuntime:count()
+    local count = 0
+    for _ in pairs(self.records) do
+        count = count + 1
+    end
+    return count
+end
+
+function ESPRuntime:highlightCount()
+    local count = 0
+    for _ in pairs(self.highlights) do
+        count = count + 1
+    end
+    return count
+end
+
+return ESPRuntime
+
+end)
+
+-- ============================================================
 -- módulo: utils.protection  (utils/protection.lua)
 -- ============================================================
 __module("utils.protection", function(BBC)
@@ -2124,8 +2955,8 @@ function Protection.init(config)
     Protection._initialized = true
     secureLog(1, "Protection layer fully initialized")
 
-    -- Register ESP features so toggles work immediately at startup
-    task.defer(function() Protection.registerESPFeatures() end)
+    -- ESP registration is performed explicitly by main.lua after the modal
+    -- definitions exist, avoiding a race with deferred UI construction.
 
     return {
         executor = Protection.Executor,
@@ -2148,504 +2979,30 @@ function Protection.destroy()
     for name in pairs(Protection._heartbeatTasks) do
         Protection.Heartbeat.stop(name)
     end
+    local engine = BBC.Modules["features.esp_engine"]
+    if engine and type(engine.stop) == "function" then
+        engine.stop()
+    end
     secureLog(1, "Protection layer destroyed")
 end
 
--- Start ESP engine (call after BBC.Library is available)
+-- ESP rendering is implemented by features.esp_engine. Protection keeps only
+-- a small compatibility surface so existing callers do not need to know the
+-- renderer module.
 function Protection.startESPEngine()
-    if Protection._espEngineStarted then return end
-    Protection._espEngineStarted = true
-    
-    local Library = BBC.Library
-    if not Library then
-        secureLog(2, "BBC.Library not available, cannot start ESP engine")
-        return
+    local engine = BBC.Modules["features.esp_engine"]
+    if engine and type(engine.start) == "function" then
+        return engine.start()
     end
-    
-    -- Defensive: ensure Library.Fonts exists (should be initialized by ui/theme.lua)
-    local FontUtils = BBC.Modules["utils.fonts"]
-    FontUtils.ensureFonts(Library)
-    
-    Library.ESP = Library.ESP or {}
-    Library.Features = Library.Features or {}
-    Library.FS = Library.FS or {}
-    Library.SV = Library.SV or {}
-    Library.ESP = Library.ESP or {}
-    
-    -- ESP rendering engine (from original BBC_HUB)
-    local Workspace = game:GetService("Workspace")
-    local RunService = game:GetService("RunService")
-    local Players = game:GetService("Players")
-    local LP = Players.LocalPlayer
-    
-    local espGui = Instance.new("ScreenGui")
-    espGui.Name = "BBCESP"
-    espGui.ResetOnSpawn = false
-    espGui.IgnoreGuiInset = true
-    espGui.DisplayOrder = 990
-    espGui.Parent = (typeof(gethui) == "function" and gethui()) or LP:WaitForChild("PlayerGui")
-    
-    local holder = Instance.new("Folder")
-    holder.Name = "BBCMarks"
-    holder.Parent = (typeof(gethui) == "function" and gethui()) or LP:WaitForChild("PlayerGui")
-    
-    local function mk(class, props, parent)
-        local i = Instance.new(class)
-        for k, v in pairs(props) do i[k] = v end
-        i.Parent = parent
-        return i
-    end
-    
-    local CODE = Font.fromEnum(Enum.Font.Code)
-    
-    local R15 = {
-        { "Head", "UpperTorso" }, { "UpperTorso", "LowerTorso" },
-        { "UpperTorso", "LeftUpperArm" }, { "LeftUpperArm", "LeftLowerArm" }, { "LeftLowerArm", "LeftHand" },
-        { "UpperTorso", "RightUpperArm" }, { "RightUpperArm", "RightLowerArm" }, { "RightLowerArm", "RightHand" },
-        { "LowerTorso", "LeftUpperLeg" }, { "LeftUpperLeg", "LeftLowerLeg" }, { "LeftLowerLeg", "LeftFoot" },
-        { "LowerTorso", "RightUpperLeg" }, { "RightUpperLeg", "RightLowerLeg" }, { "RightLowerLeg", "RightFoot" }
-    }
-    local R6 = { { "Head", "Torso" }, { "Torso", "Left Arm" }, { "Torso", "Right Arm" }, { "Torso", "Left Leg" }, { "Torso", "Right Leg" } }
-    local KEYS = { "highlight", "box", "name", "healthbar", "health", "distance", "tracers", "skeleton" }
-    
-    local function anyOn(S)
-        if not S then return false end
-        for _, k in ipairs(KEYS) do if S[k] and S[k].on then return true end end
-        return false
-    end
-    
-    local function hpColor(S, ratio)
-        if not S.healthbar.auto then return S.healthbar.color end
-        if ratio > 0.6 then return Color3.fromRGB(45, 205, 190) elseif ratio > 0.3 then return Color3.fromRGB(240, 200, 60) end
-        return Color3.fromRGB(240, 80, 70)
-    end
-    
-    local function txt(parent, anchor)
-        return mk("TextLabel", { BackgroundTransparency = 1, FontFace = CODE, TextStrokeTransparency = 0.3, TextStrokeColor3 = Color3.new(0,0,0), AnchorPoint = anchor, Size = UDim2.fromOffset(120, 14), Visible = false, TextColor3 = Color3.new(1,1,1) }, parent)
-    end
-    
-    local function lineF(f, x0, y0, x1, y1, th, col)
-        local dx, dy = x1 - x0, y1 - y0
-        f.Size = UDim2.fromOffset(math.sqrt(dx*dx + dy*dy), th)
-        f.Position = UDim2.fromOffset((x0+x1)/2, (y0+y1)/2)
-        f.Rotation = math.deg(math.atan2(dy, dx))
-        f.BackgroundColor3 = col
-        f.Visible = true
-    end
-    
-    local pool = { Jogador = {}, NPCs = {} }
-    local npcs, npcScan = {}, false
-    
-    local function addHum(h)
-        if h:IsA("Humanoid") then
-            local m = h.Parent
-            if m and m:IsA("Model") and not Players:GetPlayerFromCharacter(m) then npcs[m] = h end
-        end
-    end
-    
-    local function startNpcScan()
-        -- Only scan NPCs if NPC ESP is explicitly enabled
-        local S = Library.ESP and Library.ESP.NPCs
-        if not S or not S.highlight.on then return end
-        
-        if npcScan then return end
-        npcScan = true
-        task.spawn(function()
-            local n = 0
-            for _, d in ipairs(Workspace:GetDescendants()) do
-                addHum(d)
-                n += 1
-                if n % 400 == 0 then task.wait() end
-            end
-        end)
-        Workspace.DescendantAdded:Connect(function(d) if d:IsA("Humanoid") then task.defer(addHum, d) end end)
-    end
-    
-    local function newDraw()
-        local d = { skel = {}, skelOn = false }
-        local r = mk("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Visible = false }, espGui)
-        d.root = r
-        d.boxFull = mk("Frame", { BackgroundTransparency = 1, BorderSizePixel = 0, Visible = false }, r)
-        d.boxStroke = mk("UIStroke", { Thickness = 2 }, d.boxFull)
-        d.corners = {}
-        for i = 1, 8 do d.corners[i] = mk("Frame", { BorderSizePixel = 0, Visible = false }, r) end
-        d.hbBg = mk("Frame", { BackgroundColor3 = Color3.new(0,0,0), BackgroundTransparency = 0.35, BorderSizePixel = 0, Visible = false }, r)
-        d.hbFill = mk("Frame", { AnchorPoint = Vector2.new(0,1), Position = UDim2.fromScale(0,1), Size = UDim2.fromScale(1,1), BorderSizePixel = 0 }, d.hbBg)
-        d.name = txt(r, Vector2.new(0.5, 1))
-        d.hp = txt(r, Vector2.new(1, 0.5))
-        d.dist = txt(r, Vector2.new(0.5, 0))
-        d.near = txt(r, Vector2.new(0.5, 1))
-        d.near.Text = "▼"
-        d.tracer = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), BorderSizePixel = 0, Visible = false }, r)
-        d.dot = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(8, 8), BorderSizePixel = 0, Visible = false }, r)
-        mk("UICorner", { CornerRadius = UDim.new(1, 0) }, d.dot)
-        d.hl = mk("Highlight", { DepthMode = Enum.HighlightDepthMode.AlwaysOnTop, Enabled = false }, holder)
-        return d
-    end
-    
-    local function hideDraw(d)
-        d.root.Visible = false
-        d.hl.Enabled = false
-        d.boxFull.Visible = false
-        for i = 1, 8 do d.corners[i].Visible = false end
-        d.hbBg.Visible = false
-        d.name.Visible = false
-        d.hp.Visible = false
-        d.dist.Visible = false
-        d.near.Visible = false
-        d.tracer.Visible = false
-        d.dot.Visible = false
-        if d.skelOn then
-            for _, f in ipairs(d.skel) do f.Visible = false end
-            d.skelOn = false
-        end
-    end
-    
-    local function drawTarget(d, t, S, c, vp, isNearest)
-        local near = isNearest and S.nearest.on
-        local ncol = S.nearest.color
-        local sz = t.model:GetExtentsSize()
-        local center = t.model:GetPivot().Position
-        local topV = c:WorldToViewportPoint(center + Vector3.new(0, sz.Y/2, 0))
-        local botV = c:WorldToViewportPoint(center - Vector3.new(0, sz.Y/2, 0))
-        d.root.Visible = true
-        d.boxFull.Visible = false
-        for i = 1, 8 do d.corners[i].Visible = false end
-        d.hbBg.Visible = false; d.name.Visible = false; d.hp.Visible = false; d.dist.Visible = false; d.near.Visible = false
-        d.tracer.Visible = false; d.dot.Visible = false
-        if d.skelOn then for _, f in ipairs(d.skel) do f.Visible = false end; d.skelOn = false end
-
-        local onScreen = topV.Z > 0 and botV.Z > 0 and topV.X > -60 and topV.X < vp.X + 60 and topV.Y > -120 and botV.Y < vp.Y + 120
-        if not onScreen then
-            d.hl.Enabled = false
-            return
-        end
-        
-        local top, bottom = topV.Y, botV.Y
-        local hgt = math.max(bottom - top, 8)
-        local wid = hgt * 0.55
-        local cx = topV.X
-        local left = cx - wid/2
-        local ts = S.textSize
-        local far = S.lod.on and t.m > S.lod.near
-        local boxCol = near and ncol or S.box.color
-        local hl = S.highlight
-        
-        if d.hl.Adornee ~= t.model then d.hl.Adornee = t.model end
-        d.hl.Enabled = hl.on
-        d.hl.FillColor = near and ncol or hl.color
-        d.hl.FillTransparency = 1 - hl.alpha
-        d.hl.OutlineColor = Color3.new(0, 0, 0)
-        d.hl.OutlineTransparency = hl.outline <= 0 and 1 or 0  -- Thin dark outline
-        
-        local distText = (S.distance.unit == "studs") and (math.floor(t.studs) .. " st") or (math.floor(t.m) .. "m")
-        
-        if far then
-            if S.box.on or hl.on then
-                d.dot.Visible = true; d.dot.BackgroundColor3 = boxCol; d.dot.Position = UDim2.fromOffset(cx, (top+bottom)/2)
-            end
-            if S.distance.on then
-                d.dist.Visible = true; d.dist.Text = distText; d.dist.TextSize = math.max(ts-1,12); d.dist.TextColor3 = S.distance.color
-                d.dist.Position = UDim2.fromOffset(cx, (top+bottom)/2 + 6)
-            end
-        else
-            if S.box.on then
-                local th = S.box.thick
-                if S.box.style == "Completa" then
-                    d.boxFull.Visible = true
-                    d.boxFull.Position = UDim2.fromOffset(left, top); d.boxFull.Size = UDim2.fromOffset(wid, hgt)
-                    d.boxStroke.Color = boxCol; d.boxStroke.Thickness = th; d.boxStroke.Transparency = 1 - (S.box.alpha or 0.5)
-                else
-                    local len = math.min(S.box.corner, wid/2, hgt/2)
-                    local L = { { left, top, len, th }, { left, top, th, len }, { left+wid-len, top, len, th }, { left+wid-th, top, th, len },
-                        { left, top+hgt-th, len, th }, { left, top+hgt-len, th, len }, { left+wid-len, top+hgt-th, len, th }, { left+wid-th, top+hgt-len, th, len } }
-                    for i = 1, 8 do
-                        local f, v = d.corners[i], L[i]
-                        f.Visible = true; f.BackgroundColor3 = boxCol; f.BackgroundTransparency = 1 - (S.box.alpha or 0.5)
-                        f.Position = UDim2.fromOffset(v[1], v[2]); f.Size = UDim2.fromOffset(v[3], v[4])
-                    end
-                end
-            end
-            local ratio = math.clamp(t.hum.Health / math.max(t.hum.MaxHealth, 1), 0, 1)
-            if S.healthbar.on then
-                local bw = S.healthbar.width
-                local bx = S.healthbar.side == "Direita" and (left + wid + 3) or (left - 3 - bw)
-                d.hbBg.Visible = true; d.hbBg.Position = UDim2.fromOffset(bx, top); d.hbBg.Size = UDim2.fromOffset(bw, hgt)
-                d.hbFill.Size = UDim2.fromScale(1, ratio); d.hbFill.BackgroundColor3 = hpColor(S, ratio)
-            end
-            if S.health.on then
-                -- Número de vida é secundário (mín. 9px) e fica colado na barra de 2px.
-                d.hp.Visible = true; d.hp.Text = tostring(math.floor(t.hum.Health)); d.hp.TextSize = math.max(ts-2,9)
-                d.hp.TextColor3 = (S.healthbar.auto and ratio <= 0.6) and hpColor(S, ratio) or S.health.color
-                d.hp.Position = UDim2.fromOffset(left - 5 - (S.healthbar.on and S.healthbar.width or 0), (top+bottom)/2)
-            end
-            if near then
-                d.near.Visible = true; d.near.TextSize = ts + 2; d.near.TextColor3 = ncol
-                d.near.Position = UDim2.fromOffset(cx, top - 2 - (S.name.on and (ts + 3) or 0))
-            end
-            if S.name.on then
-                d.name.Visible = true; d.name.Text = t.name; 
-                local nameSize = math.max(ts - 1, 12) -- Clamp to 12-13 range
-                d.name.TextSize = nameSize
-                d.name.TextColor3 = S.name.color
-                -- Center name using TextBounds for exact positioning
-                d.name.Size = UDim2.fromOffset(200, nameSize + 2) -- Ensure enough width for TextBounds
-                local nameX = cx - d.name.TextBounds.X / 2
-                d.name.Position = UDim2.fromOffset(nameX, top - 2)
-            end
-            if S.distance.on then
-                -- Hierarquia de texto: nome/distância são primários (mín. 12px),
-                -- o número de vida é secundário (mín. 9px) para não competir com o nome.
-                d.dist.Visible = true; d.dist.Text = distText; d.dist.TextSize = math.max(ts-1,12); d.dist.TextColor3 = S.distance.color
-                d.dist.Size = UDim2.fromOffset(120, 14)
-                local distX = cx - d.dist.TextBounds.X / 2
-                d.dist.Position = UDim2.fromOffset(distX, bottom + 2)
-            end
-            if S.skeleton.on then
-                local list = t.model:FindFirstChild("UpperTorso") and R15 or R6
-                d.skelOn = true
-                for i, pr in ipairs(list) do
-                    local f = d.skel[i]
-                    if not f then f = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), BorderSizePixel = 0 }, d.root); d.skel[i] = f end
-                    local a, b = t.model:FindFirstChild(pr[1]), t.model:FindFirstChild(pr[2])
-                    if a and b and a:IsA("BasePart") and b:IsA("BasePart") then
-                        local va, vb = c:WorldToViewportPoint(a.Position), c:WorldToViewportPoint(b.Position)
-                        if va.Z > 0 and vb.Z > 0 then lineF(f, va.X, va.Y, vb.X, vb.Y, S.skeleton.thick, near and ncol or S.skeleton.color) else f.Visible = false end
-                    else f.Visible = false end
-                end
-                for i = #list + 1, #d.skel do d.skel[i].Visible = false end
-            end
-        end
-        if S.tracers.on then
-            local fromBottom = S.tracers.origin == "Baixo"
-            lineF(d.tracer, vp.X/2, fromBottom and vp.Y or 0, cx, fromBottom and bottom or top, S.tracers.thick, near and ncol or S.tracers.color)
-        end
-        d.hl.Enabled = hl.on
-        d.hl.FillColor = near and ncol or hl.color
-        d.hl.FillTransparency = 1 - hl.alpha
-        d.hl.OutlineColor = Color3.new(0, 0, 0)
-        d.hl.OutlineTransparency = hl.outline <= 0 and 1 or 0  -- Thin dark outline
-    end
-    
-    local function gather(kind, out)
-        if kind == "Jogador" then
-            -- Player ESP ONLY iterates Players:GetPlayers() (excluding LocalPlayer)
-            for _, pl in ipairs(Players:GetPlayers()) do
-                if pl ~= LP then
-                    local ch = pl.Character
-                    local hum = ch and ch:FindFirstChildOfClass("Humanoid")
-                    local hrp = ch and ch:FindFirstChild("HumanoidRootPart")
-                    if hum and hrp and hum.Health > 0 then out[#out+1] = { model = ch, hum = hum, hrp = hrp, name = pl.DisplayName ~= "" and pl.DisplayName or pl.Name } end
-                end
-            end
-        elseif kind == "NPCs" then
-            -- NPC ESP ONLY runs when NPC master toggle AND highlight are explicitly true
-            local S = Library.ESP and Library.ESP.NPCs
-            if not S or not S.enabled or not S.highlight.on then return end
-            
-            startNpcScan()
-            for m, hum in pairs(npcs) do
-                if not m.Parent or not m:IsDescendantOf(Workspace) then
-                    npcs[m] = nil
-                else
-                    local hrp = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
-                    if hrp and hrp:IsA("BasePart") and hum.Parent and hum.Health > 0 and m ~= LP.Character then
-                        out[#out+1] = { model = m, hum = hum, hrp = hrp, name = m.Name }
-                    end
-                end
-            end
-        end
-    end
-    
-    local function processKind(kind, S, c, vp)
-        local P = pool[kind]
-        local list = {}
-        if S and not Library.Panic and S.enabled and anyOn(S) then gather(kind, list) end
-        local camPos = c.CFrame.Position
-        local maxM = (S and S.maxDist) or 1000
-        local vis = {}
-        for _, t in ipairs(list) do
-            -- Validate character, Humanoid, HRP exist and health > 0
-            if not t.model or not t.model.Parent then continue end
-            if not t.hum or not t.hum.Parent or t.hum.Health <= 0 then continue end
-            if not t.hrp or not t.hrp.Parent or not t.hrp:IsA("BasePart") then continue end
-            
-            t.studs = (t.hrp.Position - camPos).Magnitude
-            t.m = t.studs * 0.28
-            if t.m <= maxM then vis[#vis+1] = t end
-        end
-        table.sort(vis, function(a, b) return a.studs < b.studs end)
-        local seen = {}
-        for i = 1, math.min(#vis, 24) do
-            local t = vis[i]
-            -- Double-check onScreen in drawTarget, but also verify here
-            seen[t.model] = true
-            local d = P[t.model]
-            if not d then d = newDraw(); P[t.model] = d end
-            drawTarget(d, t, S, c, vp, i == 1)
-        end
-        for model, d in pairs(P) do
-            if not seen[model] then
-                hideDraw(d)
-                if not model.Parent then d.root:Destroy(); d.hl:Destroy(); P[model] = nil end
-            end
-        end
-    end
-
-    -- Player cleanup connections
-    local LocalPlayer = Players.LocalPlayer
-
-    local function cleanupCharacter(char)
-        for kind, P in pairs(pool) do
-            local d = P[char]
-            if d then
-                d.root:Destroy()
-                d.hl:Destroy()
-                P[char] = nil
-            end
-        end
-    end
-
-    local function cleanupPlayer(pl)
-        cleanupCharacter(pl.Character)
-    end
-
-    Players.PlayerRemoving:Connect(cleanupPlayer)
-
-    -- Handle CharacterRemoving for all existing players AND future players
-    local function hookCharacterRemoving(pl)
-        pl.CharacterRemoving:Connect(cleanupCharacter)
-    end
-
-    -- Hook existing players
-    for _, pl in ipairs(Players:GetPlayers()) do
-        hookCharacterRemoving(pl)
-    end
-
-    -- Hook future players
-    Players.PlayerAdded:Connect(hookCharacterRemoving)
-
-    -- Also handle LocalPlayer explicitly (in case not in GetPlayers())
-    if LocalPlayer then
-        hookCharacterRemoving(LocalPlayer)
-    end
-    
-    local errCount, stopped = 0, false
-    RunService.RenderStepped:Connect(function(dt)
-        if stopped then return end
-        local ok, err = pcall(function()
-            local c = Workspace.CurrentCamera
-            if not c then return end
-            local vp = c.ViewportSize
-            for kind in pairs(pool) do processKind(kind, Library.ESP and Library.ESP[kind], c, vp) end
-        end)
-        if not ok then
-            errCount += 1
-            warn("[BBC] ESP: " .. tostring(err))
-            if errCount >= 5 then
-                stopped = true
-                for _, P in pairs(pool) do for _, d in pairs(P) do hideDraw(d) end end
-                Library:Notify({ Title = "BBC HUB", Content = "O ESP parou por causa de um erro (veja o console).", Duration = 5 })
-            end
-        end
-    end)
+    return false
 end
 
--- Register ESP features so toggles work
 function Protection.registerESPFeatures()
-    local Library = BBC.Library
-    if not Library then return end
-    
-    Library.Features = Library.Features or {}
-    Library.ESP = Library.ESP or {}
-    
-    -- Initialize default ESP config for all kinds at startup (so toggle works without opening settings first)
-    -- ALL features start OFF by default - user enables them explicitly
-    local defaultESPConfig = {
-        enabled = false,  -- Master toggle for this ESP kind
-        highlight = { on = false, color = Color3.fromRGB(245, 160, 30), alpha = 0.6, outline = 2 },
-        box = { on = false, color = Color3.fromRGB(215, 215, 215), thick = 1, style = "Completa", corner = 14, alpha = 0.5 },
-        name = { on = false, color = Color3.fromRGB(235, 235, 235) },
-        healthbar = { on = false, auto = true, color = Color3.fromRGB(45, 205, 190), width = 2, side = "Esquerda" },
-        health = { on = false, color = Color3.fromRGB(70, 220, 90) },
-        distance = { on = false, color = Color3.fromRGB(235, 235, 235), unit = "m" },
-        tracers = { on = false, color = Color3.fromRGB(255, 255, 255), thick = 1, origin = "Baixo" },
-        skeleton = { on = false, color = Color3.fromRGB(255, 255, 255), thick = 1.5 },
-        frozen = false, locked = false,
-        lod = { on = true, near = 150 }, nearest = { on = false, color = Color3.fromRGB(255, 60, 60) },
-        maxDist = 1000, textSize = 10, prevDist = 120, prevHp = 100,
-    }
-    
-    local function deepClone(t)
-        local copy = table.clone(t)
-        for k, v in copy do
-            if type(v) == "table" then copy[k] = deepClone(v) end
-        end
-        return copy
+    local engine = BBC.Modules["features.esp_engine"]
+    if engine and type(engine.register) == "function" then
+        return engine.register()
     end
-    
-    local npcConfig = deepClone(defaultESPConfig)
-    npcConfig.highlight.color = Color3.fromRGB(240, 95, 95)
-    
-    for _, kind in { "Jogador", "Corpo", "Recipiente", "Item no chão", "Itens de missão" } do
-        if not Library.ESP[kind] then
-            Library.ESP[kind] = deepClone(defaultESPConfig)
-        end
-    end
-    if not Library.ESP["NPCs"] then
-        Library.ESP["NPCs"] = deepClone(npcConfig)
-    end
-    
-    local function cleanupKindDrawings(kind)
-        local P = pool[kind]
-        if not P then return end
-        for model, d in pairs(P) do
-            d.root:Destroy()
-            d.hl:Destroy()
-            P[model] = nil
-        end
-    end
-    
-    local function toggleESP(kind, isEnabled)
-        local S = Library.ESP and Library.ESP[kind]
-        if not S then return end
-        
-        -- Set master enabled flag
-        S.enabled = isEnabled
-        
-        -- Disable ALL features when main toggle is off
-        if not isEnabled then
-            S.highlight.on = false
-            S.box.on = false
-            S.name.on = false
-            S.healthbar.on = false
-            S.health.on = false
-            S.distance.on = false
-            S.tracers.on = false
-            S.skeleton.on = false
-            
-            -- Immediately clean up all drawings for this kind
-            cleanupKindDrawings(kind)
-        end
-        -- When enabled = true, do NOT auto-enable sub-features (user controls them individually)
-        
-        secureLog(1, "[BBC][ESP] Toggle " .. kind .. ": " .. tostring(isEnabled))
-        if isEnabled then Protection.startESPEngine() end
-    end
-    
-    Library.Features["Jogador"] = function(v) toggleESP("Jogador", v) end
-    Library.Features["NPCs"] = function(v) toggleESP("NPCs", v) end
-    Library.Features["Corpo"] = function(v) toggleESP("Corpo", v) end
-    Library.Features["Recipiente"] = function(v) toggleESP("Recipiente", v) end
-    Library.Features["Item no chão"] = function(v) toggleESP("Recipiente", v) end
-    Library.Features["Itens de missão"] = function(v) toggleESP("Recipiente", v) end
-    Library.Features["Destaque"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.highlight.on = v end end
-    Library.Features["Caixa"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.box.on = v end end
-    Library.Features["Barra de vida"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.healthbar.on = v end end
-    Library.Features["Vida"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.health.on = v end end
-    Library.Features["Linhas"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.tracers.on = v end end
-    Library.Features["Esqueleto"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.skeleton.on = v end end
-    Library.Features["Destaque próprio"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.nearest.on = v end end
+    return false
 end
 
 
@@ -2702,6 +3059,7 @@ Library.Access = "FREE"
 Library.Keybinds = {}
 Library._kbListeners = {}
 Library._toggleBinds = {}
+Library._panicListeners = {}
 Library.Tr = function(t) return t end
 
 -- Initialize feature/option tables early (before features modules load)
@@ -2912,8 +3270,6 @@ __module("ui.components", function(BBC)
     PlayerPreview, etc.) e helpers de layout compartilhados por abas/grupos.
 ]]
 
---!strict
-
 -- Type definitions for UI components
 export type ToggleOptions = {
     Name: string,
@@ -2921,6 +3277,9 @@ export type ToggleOptions = {
     Tooltip: string?,
     Callback: (boolean) -> (),
     Settings: (() -> ())?,
+    Drawer: ((any) -> ())?,
+    DrawerParent: any?,
+    DrawerPath: string?,
     SettingsIcon: string?,
     Modal: (() -> ())?,
     ModalTitles: { string }?,
@@ -2994,6 +3353,16 @@ export type FoldoutOptions = {
     DefaultOpen: boolean?,
 }
 
+export type DrawerOptions = {
+    Name: string,
+    Tooltip: string?,
+    Build: (any) -> (),
+    Parent: any?,
+    Path: string?,
+    Width: number?,
+    Height: number?,
+}
+
 export type ContainerObject = {
     _order: number,
     _path: string?,
@@ -3008,6 +3377,7 @@ export type ContainerObject = {
     Input: (self: ContainerObject, opts: InputOptions) -> any,
     ColorPicker: (self: ContainerObject, opts: ColorPickerOptions) -> any,
     Foldout: (self: ContainerObject, opts: FoldoutOptions) -> any,
+    Drawer: (self: ContainerObject, opts: DrawerOptions) -> any,
     Segmented: (self: ContainerObject, opts: { Name: string, Options: { string }, Default: string?, Callback: (string) -> (), Tooltip: string? }) -> any,
     Label: (self: ContainerObject, opts: { Name: string, Tooltip: string? }) -> any,
     Section: (self: ContainerObject, text: string) -> any,
@@ -3095,14 +3465,155 @@ local function newOuter(self, name)
 end
 
 -- ---------- subPanel helper (moved up for forward reference) ----------
-local function subPanel(self, parentOuter, order)
+local function subPanel(self, parentOuter, order, pathKey)
     local panel = create("Frame", { Size = UDim2.new(1, -16, 0, 0), Position = UDim2.fromOffset(8, 0), AutomaticSize = Enum.AutomaticSize.Y, BorderSizePixel = 0, Visible = false, LayoutOrder = order }, parentOuter)
     bind(panel, "BackgroundColor3", "Surface2")
     corner(panel, 4); stroke(panel, "Stroke", 0.3)
     local inner = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, panel)
     pad(inner, 0, 0, 3, 3); listLayout(inner, 0)
-    local sub = setmetatable({ List = inner, _order = 0, Window = self.Window, _path = (self._path or "") .. "/sub", Frame = panel }, Container)
+    local uniquePath = tostring(pathKey or "sub")
+    local sub = setmetatable({ List = inner, _order = 0, Window = self.Window, _path = (self._path or "") .. "/sub/" .. uniquePath, Frame = panel }, Container)
     return sub, panel
+end
+
+-- ---------- Drawer ----------
+local function buildDrawer(self, opts)
+    local win = self.Window
+    local parent = opts.Parent or (win and win._content)
+    if not parent then
+        return nil
+    end
+
+    local overlay = create("Frame", {
+        Name = "BBCHUDrawerOverlay",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 0.18,
+        BorderSizePixel = 0,
+        Visible = false,
+        ZIndex = 35,
+        Active = true,
+    }, parent)
+    bind(overlay, "BackgroundColor3", "Background")
+
+    local panel = create("Frame", {
+        Name = "BBCHUDrawer",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromScale(0.9, 0.78),
+        BackgroundTransparency = 0,
+        BorderSizePixel = 0,
+        ZIndex = 36,
+    }, overlay)
+    bind(panel, "BackgroundColor3", "Surface")
+    corner(panel, 6)
+    stroke(panel, "Accent", 0.15)
+
+    create("UISizeConstraint", {
+        MaxSize = Vector2.new(opts.Width or 380, opts.Height or 300),
+    }, panel)
+
+    local header = create("Frame", {
+        Name = "DrawerHeader",
+        Size = UDim2.new(1, 0, 0, 32),
+        BackgroundTransparency = 1,
+        ZIndex = 37,
+    }, panel)
+    label(header, opts.Name or "Ajustes", 13, "Text", true, {
+        Position = UDim2.fromOffset(12, 0),
+        Size = UDim2.new(1, -58, 1, 0),
+        TextYAlignment = Enum.TextYAlignment.Center,
+        ZIndex = 38,
+    })
+    local divider = create("Frame", {
+        Position = UDim2.fromOffset(8, 31),
+        Size = UDim2.new(1, -16, 0, 1),
+        BackgroundTransparency = 0.4,
+        BorderSizePixel = 0,
+        ZIndex = 37,
+    }, header)
+    bind(divider, "BackgroundColor3", "Stroke")
+
+    local close = create("TextButton", {
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -6, 0, -6),
+        Size = UDim2.fromOffset(44, 44),
+        BackgroundTransparency = 1,
+        Text = "",
+        AutoButtonColor = false,
+        ZIndex = 38,
+    }, header)
+    icon(close, "x", 16, "Text", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        ZIndex = 39,
+    })
+
+    local body = create("ScrollingFrame", {
+        Name = "DrawerContent",
+        Position = UDim2.fromOffset(0, 32),
+        Size = UDim2.new(1, 0, 1, -32),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ScrollBarThickness = 2,
+        CanvasSize = UDim2.new(),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollingDirection = Enum.ScrollingDirection.Y,
+        ZIndex = 37,
+    }, panel)
+    bind(body, "ScrollBarImageColor3", "Accent")
+    pad(body, 8, 8, 4, 4)
+    listLayout(body, 4)
+
+    local drawerPath = opts.Path or ((self._path or "") .. "/drawer/" .. tostring(opts.Name or "ajustes"))
+    local content = setmetatable({
+        List = body,
+        _order = 0,
+        Window = win,
+        _path = drawerPath,
+        Frame = panel,
+    }, Container)
+
+    local drawer = { Overlay = overlay, Panel = panel, Content = content }
+
+    function drawer.Open()
+        if win and win._activeDrawer and win._activeDrawer ~= drawer then
+            win._activeDrawer:Close()
+        end
+        overlay.Visible = true
+        if win then
+            win._activeDrawer = drawer
+        end
+    end
+
+    function drawer.Close()
+        overlay.Visible = false
+        if win and win._activeDrawer == drawer then
+            win._activeDrawer = nil
+        end
+    end
+
+    function drawer.IsOpen()
+        return overlay.Visible == true
+    end
+
+    function drawer.Destroy()
+        drawer.Close()
+        overlay:Destroy()
+    end
+
+    close.Activated:Connect(drawer.Close)
+    if type(parent.GetPropertyChangedSignal) == "function" then
+        parent:GetPropertyChangedSignal("Visible"):Connect(function()
+            if not parent.Visible then
+                drawer.Close()
+            end
+        end)
+    end
+
+    win._drawers = win._drawers or {}
+    table.insert(win._drawers, drawer)
+    safeCall(opts.Build, content)
+    return drawer
 end
 
 -- ---------- Toggle ----------
@@ -3255,37 +3766,61 @@ function Container:Toggle(opts)
         -- Declarado antes e atribuído depois (em vez de `local modalBtn = createGearButton(...)`)
         -- porque o callback referencia a própria variável; assim o analisador estático
         -- enxerga o uso e não reporta "unused local".
-        local modalBtn = nil
-        modalBtn = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
+        local modalIcon = nil
+        local _, returnedModalIcon = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
             local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras)
             if not hooked then
                 hooked = true
                 m.Overlay:GetPropertyChangedSignal("Visible"):Connect(function()
-                    if modalBtn and modalBtn.ImageColor3 then
-                        modalBtn.ImageColor3 = m.Overlay.Visible and Library.Theme.Accent or Library.Theme.Text
+                    if modalIcon and modalIcon.ImageColor3 then
+                        modalIcon.ImageColor3 = m.Overlay.Visible and Library.Theme.Accent or Library.Theme.Text
                     end
                 end)
             end
             m.Overlay.Visible = not m.Overlay.Visible
         end)
+        modalIcon = returnedModalIcon
         -- Ícone visível na mesma posição/estilo dos rows de ajustes (Corpo/Recipiente).
         -- O clique na linha APENAS liga/desliga o toggle; o modal abre só pelas 3 setinhas.
         if opts.Prebuild then
-            task.defer(function() pcall(function() self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras) end) end)
+            pcall(function() self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras) end)
         end
     end
 
-    -- Submenu (ícone de ajustes)
-    if type(opts.Settings) == "function" then
-        local sub, panel = subPanel(self, outer, 2)
+    -- Drawer (ícone de ajustes) ou submenu em linha.
+    if type(opts.Drawer) == "function" then
+        local drawer = buildDrawer(self, {
+            Name = opts.Name,
+            Build = opts.Drawer,
+            Parent = opts.DrawerParent,
+            Path = opts.DrawerPath,
+        })
+        local drawerIcon = nil
+        local _, returnedDrawerIcon = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
+            if not drawer then return end
+            if drawer.IsOpen() then
+                drawer.Close()
+            else
+                drawer.Open()
+            end
+            if drawerIcon and drawerIcon.ImageColor3 then
+                drawerIcon.ImageColor3 = drawer.IsOpen() and Library.Theme.Accent or Library.Theme.Text
+            end
+        end)
+        drawerIcon = returnedDrawerIcon
+        obj.Drawer = drawer
+    elseif type(opts.Settings) == "function" then
+        local sub, panel = subPanel(self, outer, 2, tostring(opts.Name))
         local open = false
-        local _, gi = createGearButton(row, opts.SettingsIcon or "sliders-horizontal", 20, GEAR_ZINDEX, function()
+        local gi = nil
+        local _, returnedIcon = createGearButton(row, opts.SettingsIcon or "sliders-horizontal", 20, GEAR_ZINDEX, function()
             open = not open
             panel.Visible = open
             if gi and gi.ImageColor3 then
                 gi.ImageColor3 = open and Library.Theme.Accent or Library.Theme.Text
             end
         end)
+        gi = returnedIcon
         obj.SettingsPanel = sub
         safeCall(opts.Settings, sub)
     end
@@ -3293,15 +3828,43 @@ function Container:Toggle(opts)
     return obj
 end
 
--- ---------- subPanel helper ----------
-local function subPanel(self, parentOuter, order)
-    local panel = create("Frame", { Size = UDim2.new(1, -16, 0, 0), Position = UDim2.fromOffset(8, 0), AutomaticSize = Enum.AutomaticSize.Y, BorderSizePixel = 0, Visible = false, LayoutOrder = order }, parentOuter)
-    bind(panel, "BackgroundColor3", "Surface2")
-    corner(panel, 4); stroke(panel, "Stroke", 0.3)
-    local inner = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, panel)
-    pad(inner, 0, 0, 3, 3); listLayout(inner, 0)
-    local sub = setmetatable({ List = inner, _order = 0, Window = self.Window, _path = (self._path or "") .. "/sub", Frame = panel }, Container)
-    return sub, panel
+-- ---------- Drawer row ----------
+function Container:Drawer(opts)
+    opts = opts or {}
+    local outer = newOuter(self, opts.Name)
+    local row = create("TextButton", {
+        Size = UDim2.new(1, 0, 0, 30),
+        BackgroundTransparency = 1,
+        Text = "",
+        AutoButtonColor = false,
+        LayoutOrder = 1,
+    }, outer)
+    separator(row)
+    label(row, opts.Name, 13, "Text", false, {
+        Position = UDim2.fromOffset(12, 0),
+        Size = UDim2.new(1, -110, 1, 0),
+        TextYAlignment = Enum.TextYAlignment.Center,
+    })
+
+    local drawer = buildDrawer(self, opts)
+    local gearIcon = nil
+    local _, returnedGearIcon = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
+        if not drawer then return end
+        if drawer.IsOpen() then
+            drawer.Close()
+        else
+            drawer.Open()
+        end
+        if gearIcon and gearIcon.ImageColor3 then
+            gearIcon.ImageColor3 = drawer.IsOpen() and Library.Theme.Accent or Library.Theme.Text
+        end
+    end)
+    gearIcon = returnedGearIcon
+    row.Activated:Connect(function()
+        if drawer then drawer.Open() end
+    end)
+
+    return drawer or { Frame = outer }
 end
 
 -- ---------- Slider ----------
@@ -3664,7 +4227,7 @@ function Container:Foldout(opts)
     separator(row)
     label(row, opts.Name, 13, "Text", false, { Position = UDim2.fromOffset(12, 0), Size = UDim2.new(1, -40, 1, 0), TextYAlignment = Enum.TextYAlignment.Center })
     local arrow = label(row, "▶", 11, "Text", false, { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, 0), Size = UDim2.fromOffset(14, 16), TextXAlignment = Enum.TextXAlignment.Right })
-    local sub, panel = subPanel(self, outer, 2)
+    local sub, panel = subPanel(self, outer, 2, tostring(opts.Name))
     local function setOpen(v) panel.Visible = v; arrow.Text = v and "▼" or "▶" end
     row.MouseButton1Click:Connect(function() setOpen(not panel.Visible) end)
     safeCall(opts.Build, sub)
@@ -3846,6 +4409,7 @@ local Window = {}
 Window.__index = Window
 
 local CFG_FOLDER = "BBC_HUB/configs"
+local CONFIG_VERSION = 4
 
 local function canFS()
     return type(writefile) == "function" and type(readfile) == "function" and type(isfile) == "function"
@@ -3958,7 +4522,7 @@ function Window:_getModal(key, titles, build, headerExtras)
         local f = create("Frame", { Position = UDim2.new(left and 0 or 0.5, left and 0 or 4, 0, 0), Size = UDim2.new(0.5, -4, 1, 0), BorderSizePixel = 0 }, overlay)
         bind(f, "BackgroundColor3", "Surface"); corner(f, 4)
         local st = create("UIStroke", { Thickness = 1, Transparency = 0.15 }, f); bind(st, "Color", "Accent")
-        
+
         -- Header bar with title + optional extras (action buttons)
         -- Posicionamento manual (sem UIListLayout + spacer): o spacer em escala estourava
         -- a largura da coluna e empurrava os ícones para fora da própria caixa.
@@ -4019,12 +4583,12 @@ function Window:_getModal(key, titles, build, headerExtras)
             label(header, title or "", 12, "Muted", true, {
                 AnchorPoint = Vector2.new(1, 0.5),
                 Position = UDim2.new(1, -rightPad, 0.5, 0),
-                Size = UDim2.fromOffset(110, 22),
+                Size = UDim2.fromOffset(170, 22),
                 TextXAlignment = Enum.TextXAlignment.Right,
                 TextYAlignment = Enum.TextYAlignment.Center,
             })
         end
-        
+
         local ln = create("Frame", { Position = UDim2.fromOffset(8, 28), Size = UDim2.new(1, -16, 0, 1), BorderSizePixel = 0, BackgroundTransparency = 0.4 }, f)
         bind(ln, "BackgroundColor3", "Stroke")
         return f
@@ -4042,9 +4606,9 @@ function Window:_getModal(key, titles, build, headerExtras)
         CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollingDirection = Enum.ScrollingDirection.Y }, rb)
     bind(rs, "ScrollBarImageColor3", "Accent")
     listLayout(rs, 0); pad(rs, 4, 6, 0, 4)
-    m = { Overlay = overlay, Left = lbody, LeftBox = lb, RightBox = rb, RightScroll = rs, Close = function() overlay.Visible = false end }
+    m = { Overlay = overlay, Left = lbody, LeftBox = lb, RightBox = rb, RightScroll = rs, Window = self, Close = function() overlay.Visible = false end }
     modalRef.m = m
-    m.Right = setmetatable({ List = rs, _order = 0, Window = self, _path = key .. "/painel" }, Container)
+    m.Right = setmetatable({ List = rs, _order = 0, Window = self, _path = key .. "/painel", Frame = rb }, Container)
     self._modals[key] = m
     safeCall(build, m)
     return m
@@ -4053,6 +4617,9 @@ end
 function Window:_select(tab)
     if not tab then return end
     local switching = self.Current ~= nil and self.Current ~= tab and not self._introActive
+    if self._activeDrawer then
+        self._activeDrawer:Close()
+    end
     for _, m in pairs(self._modals or {}) do m.Overlay.Visible = false end
     for _, t in ipairs(self.Tabs) do
         t.Page.Visible = (t == tab)
@@ -4139,7 +4706,7 @@ function Window:SaveConfig(name, quiet)
     if not canFS() then Library:Notify({ Title = "BBC HUB", Content = "Salvar precisa de writefile no executor." }); return false end
     ensureFolders()
     local snap = self:_snapshot()
-    local ok = pcall(function() writefile(CFG_FOLDER .. "/" .. name .. ".json", HttpService:JSONEncode({ v = 3, name = name, data = snap })) end)
+    local ok = pcall(function() writefile(CFG_FOLDER .. "/" .. name .. ".json", HttpService:JSONEncode({ v = CONFIG_VERSION, name = name, data = snap })) end)
     if ok then
         self._cfgName = name
         self._lastState = stable(snap)
@@ -4160,6 +4727,23 @@ function Window:LoadConfig(name, quiet)
         for k in pairs(data) do
             if string.find(k, "/Jogador/", 1, true) or string.find(k, "/NPCs/", 1, true) then data[k] = nil end
         end
+    elseif decoded.v == 3 then
+        -- v3 stored modal toggles below "/painel/settings" and mixed drawer
+        -- values below the same subtree. Move the known toggle entries to the
+        -- v4 modal path and discard the ambiguous legacy drawer values.
+        local migrated = {}
+        for key, value in pairs(data) do
+            if not string.find(key, "/painel/settings/sub/", 1, true) then
+                local kind, label = string.match(key, "^(.-)/painel/settings/(.+)$")
+                if kind == "Jogador" or kind == "NPCs" then
+                    local newLabel = label == "Linhas até alvos" and "Linhas" or label
+                    migrated[kind .. "/painel/" .. newLabel] = value
+                else
+                    migrated[key] = value
+                end
+            end
+        end
+        data = migrated
     end
     self:_applyData(data)
     self._cfgName = name
@@ -4184,7 +4768,7 @@ function Window:_autoSaveNow()
     self._lastState = state
     ensureFolders()
     local name = self._cfgName or "default"
-    pcall(function() writefile(CFG_FOLDER .. "/" .. name .. ".json", HttpService:JSONEncode({ v = 3, name = name, data = snap })) end)
+    pcall(function() writefile(CFG_FOLDER .. "/" .. name .. ".json", HttpService:JSONEncode({ v = CONFIG_VERSION, name = name, data = snap })) end)
 end
 
 function Window:StartAutoSave()
@@ -4212,11 +4796,24 @@ function Window:_updateIsland()
     self:_updatePins()
 end
 
-function Library:OnPanic(fn) table.insert(Library._panicListeners, fn) end
+function Library:OnPanic(fn)
+    table.insert(Library._panicListeners, fn)
+    return function()
+        for index = #Library._panicListeners, 1, -1 do
+            if Library._panicListeners[index] == fn then
+                table.remove(Library._panicListeners, index)
+                break
+            end
+        end
+    end
+end
 function Window:SetPanic(on)
     on = on == true
     if Library.Panic == on then return end
     Library.Panic = on
+    if self._activeDrawer then
+        self._activeDrawer:Close()
+    end
     if self.Gui then self.Gui.Enabled = not on end
     if BBC.notifyGui then BBC.notifyGui.Enabled = not on end
     for _, g in ipairs(Library._panicGuis) do pcall(function() g.Enabled = not on end) end
@@ -4493,6 +5090,7 @@ end
 
 function Window:Destroy()
     for _, c in ipairs(self._conns) do pcall(function() c:Disconnect() end) end
+    for _, drawer in ipairs(self._drawers or {}) do pcall(function() drawer:Close() end) end
     if self.Gui then self.Gui:Destroy() end
     for i, w in ipairs(Library.Windows) do if w == self then table.remove(Library.Windows, i) break end end
 end
@@ -4833,7 +5431,7 @@ function Library:Window(opts)
     fit()
     self:_connect(gui:GetPropertyChangedSignal("AbsoluteSize"), fit)
     if intro then self:_startIntro(opts, W, H) end
-    
+
     -- Safety timeout: force-show main frame if intro gets stuck (max 15s)
     task.spawn(function()
         local introTimeout = 15
@@ -5012,6 +5610,1645 @@ return { Tab = Tab, Window = Window }
 end)
 
 -- ============================================================
+-- módulo: features.esp_engine  (features/esp_engine.lua)
+-- ============================================================
+__module("features.esp_engine", function(BBC)
+--!strict
+--[[
+    BBC HUB - ESP engine
+
+    Owns the Roblox-side ESP visuals. Configuration lives in utils.esp_config,
+    while the model registry is centralized in utils.esp_runtime so a character
+    can never receive more than one Highlight.
+]]
+
+local Engine = {}
+
+local ESPConfig = BBC.Modules["utils.esp_config"]
+local ESPLogic = BBC.Modules["utils.esp_logic"]
+local ESPRuntime = BBC.Modules["utils.esp_runtime"]
+
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local FEATURE_KEYS = {
+    highlight = true,
+    box = true,
+    name = true,
+    healthbar = true,
+    health = true,
+    distance = true,
+    tracers = true,
+    skeleton = true,
+}
+
+local R15 = {
+    { "Head", "UpperTorso" }, { "UpperTorso", "LowerTorso" },
+    { "UpperTorso", "LeftUpperArm" }, { "LeftUpperArm", "LeftLowerArm" }, { "LeftLowerArm", "LeftHand" },
+    { "UpperTorso", "RightUpperArm" }, { "RightUpperArm", "RightLowerArm" }, { "RightLowerArm", "RightHand" },
+    { "LowerTorso", "LeftUpperLeg" }, { "LeftUpperLeg", "LeftLowerLeg" }, { "LeftLowerLeg", "LeftFoot" },
+    { "LowerTorso", "RightUpperLeg" }, { "RightUpperLeg", "RightLowerLeg" }, { "RightLowerLeg", "RightFoot" },
+}
+
+local R6 = {
+    { "Head", "Torso" }, { "Torso", "Left Arm" }, { "Torso", "Right Arm" },
+    { "Torso", "Left Leg" }, { "Torso", "Right Leg" },
+}
+
+local MAX_TARGETS = 24
+
+local runtime: any = nil
+local espGui: any = nil
+local markHolder: any = nil
+local started = false
+local registered = false
+local stopped = false
+local bindCloseRegistered = false
+local errorCount = 0
+local renderConnection: any = nil
+local unsubscribeConfig: (() -> ())? = nil
+local unsubscribePanic: (() -> ())? = nil
+local npcScanStarted = false
+local npcScanConnection: any = nil
+local npcs: { [any]: any } = {}
+local modelHeights: { [any]: { height: number, updatedAt: number } } = {}
+local playerConnections: { any } = {}
+local hookedPlayers: { [any]: boolean } = {}
+
+local function log(message)
+    warn("[BBC][ESP] " .. tostring(message))
+end
+
+local function library()
+    return BBC.Library
+end
+
+local function globalState()
+    if type(getgenv) ~= "function" then
+        return nil
+    end
+    local ok, state = pcall(getgenv)
+    if ok and type(state) == "table" then
+        return state
+    end
+    return nil
+end
+
+local function ensureConfig()
+    local lib = library()
+    if not lib or not ESPConfig then
+        return nil
+    end
+    return ESPConfig.ensureDefaults(lib)
+end
+
+local function anyFeatureEnabled(settings)
+    if type(settings) ~= "table" then
+        return false
+    end
+    for key in pairs(FEATURE_KEYS) do
+        local feature = settings[key]
+        if type(feature) == "table" and feature.on == true then
+            return true
+        end
+    end
+    return false
+end
+
+local function featureFromPath(path)
+    local root = string.match(tostring(path or ""), "^([^%.]+)")
+    if root and FEATURE_KEYS[root] then
+        return root
+    end
+    return nil
+end
+
+local function guiParent()
+    if type(gethui) == "function" then
+        local ok, parent = pcall(gethui)
+        if ok and parent then
+            return parent
+        end
+    end
+
+    local playerGui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+    if playerGui then
+        return playerGui
+    end
+    return nil
+end
+
+local function make(className, properties, parent)
+    local instance = Instance.new(className)
+    for key, value in pairs(properties) do
+        instance[key] = value
+    end
+    instance.Parent = parent
+    return instance
+end
+
+local function isPlayerOwned(model)
+    if model == nil then
+        return false
+    end
+    local ok, player = pcall(function()
+        return Players:GetPlayerFromCharacter(model)
+    end)
+    return ok and player ~= nil
+end
+
+local function hideSkeleton(drawing)
+    for _, line in ipairs(drawing.skel) do
+        line.Visible = false
+    end
+    drawing.skelOn = false
+end
+
+local function hideDraw(drawing)
+    if not drawing then
+        return
+    end
+    drawing.root.Visible = false
+    if drawing.hl then
+        drawing.hl.Enabled = false
+    end
+    drawing.boxFull.Visible = false
+    for _, cornerFrame in ipairs(drawing.corners) do
+        cornerFrame.Visible = false
+    end
+    drawing.hbBg.Visible = false
+    drawing.name.Visible = false
+    drawing.hp.Visible = false
+    drawing.dist.Visible = false
+    drawing.near.Visible = false
+    drawing.tracer.Visible = false
+    drawing.dot.Visible = false
+    hideSkeleton(drawing)
+end
+
+local function hideFeature(drawing, feature)
+    if not drawing then
+        return
+    end
+
+    if feature == "highlight" and drawing.hl then
+        drawing.hl.Enabled = false
+    elseif feature == "box" then
+        drawing.boxFull.Visible = false
+        for _, cornerFrame in ipairs(drawing.corners) do
+            cornerFrame.Visible = false
+        end
+    elseif feature == "name" then
+        drawing.name.Visible = false
+    elseif feature == "healthbar" then
+        drawing.hbBg.Visible = false
+    elseif feature == "health" then
+        drawing.hp.Visible = false
+    elseif feature == "distance" then
+        drawing.dist.Visible = false
+    elseif feature == "tracers" then
+        drawing.tracer.Visible = false
+    elseif feature == "skeleton" then
+        hideSkeleton(drawing)
+    end
+end
+
+local function newDraw()
+    local drawing = { skel = {}, skelOn = false }
+
+    drawing.root = make("Frame", {
+        Name = "ESPDrawing",
+        BackgroundTransparency = 1,
+        Size = UDim2.fromScale(1, 1),
+        Visible = false,
+        Active = false,
+    }, espGui)
+
+    drawing.boxFull = make("Frame", {
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Visible = false,
+        Active = false,
+    }, drawing.root)
+
+    drawing.boxStroke = make("UIStroke", { Thickness = 1 }, drawing.boxFull)
+    drawing.corners = {}
+    for index = 1, 8 do
+        drawing.corners[index] = make("Frame", {
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Visible = false,
+            Active = false,
+        }, drawing.root)
+    end
+
+    drawing.hbBg = make("Frame", {
+        BackgroundColor3 = Color3.new(0, 0, 0),
+        BackgroundTransparency = 0.35,
+        BorderSizePixel = 0,
+        Visible = false,
+        Active = false,
+    }, drawing.root)
+
+    drawing.hbFill = make("Frame", {
+        AnchorPoint = Vector2.new(0, 1),
+        Position = UDim2.fromScale(0, 1),
+        Size = UDim2.fromScale(1, 1),
+        BorderSizePixel = 0,
+    }, drawing.hbBg)
+
+    local fonts = library().Fonts
+    local font = fonts and (fonts.Code or fonts.Medium or fonts.Regular)
+    local function textLabel(anchor)
+        return make("TextLabel", {
+            BackgroundTransparency = 1,
+            FontFace = font,
+            TextStrokeTransparency = 0.3,
+            TextStrokeColor3 = Color3.new(0, 0, 0),
+            AnchorPoint = anchor,
+            Size = UDim2.fromOffset(120, 14),
+            Visible = false,
+            TextColor3 = Color3.new(1, 1, 1),
+            Active = false,
+        }, drawing.root)
+    end
+
+    drawing.name = textLabel(Vector2.new(0.5, 1))
+    drawing.hp = textLabel(Vector2.new(1, 0.5))
+    drawing.dist = textLabel(Vector2.new(0.5, 0))
+    drawing.near = textLabel(Vector2.new(0.5, 1))
+    drawing.near.Text = "▼"
+
+    drawing.tracer = make("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        BorderSizePixel = 0,
+        Visible = false,
+        Active = false,
+    }, drawing.root)
+
+    drawing.dot = make("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Size = UDim2.fromOffset(8, 8),
+        BorderSizePixel = 0,
+        Visible = false,
+        Active = false,
+    }, drawing.root)
+    make("UICorner", { CornerRadius = UDim.new(1, 0) }, drawing.dot)
+
+    drawing.hideAll = function()
+        hideDraw(drawing)
+    end
+
+    drawing.hideFeature = function(feature)
+        hideFeature(drawing, feature)
+    end
+
+    drawing.destroy = function()
+        drawing.root:Destroy()
+    end
+
+    return drawing
+end
+
+local function hpColor(settings, ratio)
+    if not settings.healthbar.auto then
+        return settings.healthbar.color
+    end
+    if ratio > 0.6 then
+        return Color3.fromRGB(45, 205, 190)
+    elseif ratio > 0.3 then
+        return Color3.fromRGB(240, 200, 60)
+    end
+    return Color3.fromRGB(240, 80, 70)
+end
+
+local function lineTo(frame, x0, y0, x1, y1, thickness, color)
+    local deltaX, deltaY = x1 - x0, y1 - y0
+    frame.Size = UDim2.fromOffset(math.sqrt(deltaX * deltaX + deltaY * deltaY), thickness)
+    frame.Position = UDim2.fromOffset((x0 + x1) / 2, (y0 + y1) / 2)
+    frame.Rotation = math.deg(math.atan2(deltaY, deltaX))
+    frame.BackgroundColor3 = color
+    frame.Visible = true
+end
+
+local function modelHeight(model)
+    local now = os.clock()
+    local cached = modelHeights[model]
+    if cached and now - cached.updatedAt < 0.5 then
+        return cached.height
+    end
+
+    local ok, size = pcall(function()
+        return model:GetExtentsSize()
+    end)
+    local height = ok and size and size.Y or 5
+    modelHeights[model] = { height = height, updatedAt = now }
+    return height
+end
+
+local function drawTarget(drawing, target, settings, camera, viewport, isNearest)
+    hideDraw(drawing)
+
+    local model = target.model
+    local humanoid = target.hum
+    if not model or not humanoid or not camera then
+        return
+    end
+
+    local height3D = modelHeight(model)
+    local center = target.hrp and target.hrp.Position or model:GetPivot().Position
+    local topPoint = camera:WorldToViewportPoint(center + Vector3.new(0, height3D / 2, 0))
+    local bottomPoint = camera:WorldToViewportPoint(center - Vector3.new(0, height3D / 2, 0))
+
+    local onScreen = topPoint.Z > 0
+        and bottomPoint.Z > 0
+        and topPoint.X > -60
+        and topPoint.X < viewport.X + 60
+        and topPoint.Y > -120
+        and bottomPoint.Y < viewport.Y + 120
+    if not onScreen then
+        if drawing.hl then
+            drawing.hl.Enabled = false
+        end
+        return
+    end
+
+    local nearest = isNearest and settings.nearest.on == true
+    local nearestColor = settings.nearest.color
+    local featureColor = nearest and nearestColor or settings.highlight.color
+    local top, bottom = topPoint.Y, bottomPoint.Y
+    local height = math.max(bottom - top, 8)
+    local width = height * 0.55
+    local centerX = topPoint.X
+    local left = centerX - width / 2
+    local far = settings.lod.on and target.m > settings.lod.near
+
+    drawing.root.Visible = true
+
+    if drawing.hl then
+        drawing.hl.Adornee = model
+        drawing.hl.Enabled = settings.highlight.on and not far
+        drawing.hl.FillColor = featureColor
+        drawing.hl.FillTransparency = settings.highlight.fillTransparency
+        drawing.hl.OutlineColor = settings.highlight.outlineColor
+        drawing.hl.OutlineTransparency = settings.highlight.outlineTransparency
+    end
+
+    local distanceText = settings.distance.unit == "studs"
+        and (math.floor(target.studs) .. " st")
+        or (math.floor(target.m) .. "m")
+
+    if far then
+        drawing.dot.Visible = true
+        drawing.dot.BackgroundColor3 = nearest and nearestColor or settings.box.color
+        drawing.dot.Position = UDim2.fromOffset(centerX, (top + bottom) / 2)
+        if settings.distance.on then
+            local distanceSize = ESPLogic.scaledTextSize(settings, settings.distance.size)
+            drawing.dist.Visible = true
+            drawing.dist.Text = distanceText
+            drawing.dist.TextSize = distanceSize
+            drawing.dist.TextColor3 = settings.distance.color
+            drawing.dist.TextStrokeTransparency = settings.distance.outline and 0.3 or 1
+            drawing.dist.Size = UDim2.fromOffset(120, distanceSize + 2)
+            drawing.dist.Position = UDim2.fromOffset(centerX - drawing.dist.TextBounds.X / 2, (top + bottom) / 2 + 6)
+        end
+    else
+        if settings.box.on then
+            local thickness = settings.box.thick
+            if settings.box.style == "Completa" then
+                drawing.boxFull.Visible = true
+                drawing.boxFull.Position = UDim2.fromOffset(left, top)
+                drawing.boxFull.Size = UDim2.fromOffset(width, height)
+                drawing.boxStroke.Color = nearest and nearestColor or settings.box.color
+                drawing.boxStroke.Thickness = thickness
+                drawing.boxStroke.Transparency = 1 - settings.box.alpha
+            else
+                local cornerLength = math.min(settings.box.corner, width / 2, height / 2)
+                local segments = {
+                    { left, top, cornerLength, thickness },
+                    { left, top, thickness, cornerLength },
+                    { left + width - cornerLength, top, cornerLength, thickness },
+                    { left + width - thickness, top, thickness, cornerLength },
+                    { left, top + height - thickness, cornerLength, thickness },
+                    { left, top + height - cornerLength, thickness, cornerLength },
+                    { left + width - cornerLength, top + height - thickness, cornerLength, thickness },
+                    { left + width - thickness, top + height - cornerLength, thickness, cornerLength },
+                }
+                for index = 1, 8 do
+                    local frame = drawing.corners[index]
+                    local segment = segments[index]
+                    frame.Visible = true
+                    frame.BackgroundColor3 = nearest and nearestColor or settings.box.color
+                    frame.BackgroundTransparency = 1 - settings.box.alpha
+                    frame.Position = UDim2.fromOffset(segment[1], segment[2])
+                    frame.Size = UDim2.fromOffset(segment[3], segment[4])
+                end
+            end
+        end
+
+        local ratio = math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1)
+        if settings.healthbar.on then
+            local barWidth = settings.healthbar.width
+            local barX = settings.healthbar.side == "Direita"
+                and (left + width + 3)
+                or (left - 3 - barWidth)
+            drawing.hbBg.Visible = true
+            drawing.hbBg.Position = UDim2.fromOffset(barX, top)
+            drawing.hbBg.Size = UDim2.fromOffset(barWidth, height)
+            drawing.hbFill.Size = UDim2.fromScale(1, ratio)
+            drawing.hbFill.BackgroundColor3 = hpColor(settings, ratio)
+        end
+
+        if settings.health.on then
+            drawing.hp.Visible = true
+            drawing.hp.Text = tostring(math.floor(humanoid.Health))
+            drawing.hp.TextSize = ESPLogic.scaledTextSize(settings, settings.health.size)
+            drawing.hp.TextColor3 = settings.healthbar.auto and ratio <= 0.6
+                and hpColor(settings, ratio)
+                or settings.health.color
+            drawing.hp.Position = UDim2.fromOffset(
+                left - 5 - (settings.healthbar.on and settings.healthbar.width or 0),
+                (top + bottom) / 2
+            )
+        end
+
+        if nearest then
+            drawing.near.Visible = true
+            drawing.near.TextSize = ESPLogic.scaledTextSize(settings, settings.textSize + 2)
+            drawing.near.TextColor3 = nearestColor
+            drawing.near.Position = UDim2.fromOffset(centerX, top - 2 - (settings.name.on and (settings.textSize + 3) or 0))
+        end
+
+        if settings.name.on then
+            local nameSize = ESPLogic.scaledTextSize(settings, settings.name.size)
+            drawing.name.Visible = true
+            drawing.name.Text = target.name
+            drawing.name.TextSize = nameSize
+            drawing.name.TextColor3 = settings.name.color
+            drawing.name.TextStrokeTransparency = settings.name.outline and 0.3 or 1
+            drawing.name.Size = UDim2.fromOffset(200, nameSize + 2)
+            drawing.name.Position = UDim2.fromOffset(centerX - drawing.name.TextBounds.X / 2, top - 2)
+        end
+
+        if settings.distance.on then
+            local distanceSize = ESPLogic.scaledTextSize(settings, settings.distance.size)
+            drawing.dist.Visible = true
+            drawing.dist.Text = distanceText
+            drawing.dist.TextSize = distanceSize
+            drawing.dist.TextColor3 = settings.distance.color
+            drawing.dist.TextStrokeTransparency = settings.distance.outline and 0.3 or 1
+            drawing.dist.Size = UDim2.fromOffset(120, distanceSize + 2)
+            drawing.dist.Position = UDim2.fromOffset(centerX - drawing.dist.TextBounds.X / 2, bottom + 2)
+        end
+
+        if settings.skeleton.on then
+            local joints = model:FindFirstChild("UpperTorso") and R15 or R6
+            drawing.skelOn = true
+            for index, pair in ipairs(joints) do
+                local line = drawing.skel[index]
+                if not line then
+                    line = make("Frame", {
+                        AnchorPoint = Vector2.new(0.5, 0.5),
+                        BorderSizePixel = 0,
+                        Active = false,
+                    }, drawing.root)
+                    drawing.skel[index] = line
+                end
+                local first = model:FindFirstChild(pair[1])
+                local second = model:FindFirstChild(pair[2])
+                if first and second and first:IsA("BasePart") and second:IsA("BasePart") then
+                    local firstPoint = camera:WorldToViewportPoint(first.Position)
+                    local secondPoint = camera:WorldToViewportPoint(second.Position)
+                    if firstPoint.Z > 0 and secondPoint.Z > 0 then
+                        lineTo(
+                            line,
+                            firstPoint.X,
+                            firstPoint.Y,
+                            secondPoint.X,
+                            secondPoint.Y,
+                            settings.skeleton.thick,
+                            nearest and nearestColor or settings.skeleton.color
+                        )
+                    else
+                        line.Visible = false
+                    end
+                else
+                    line.Visible = false
+                end
+            end
+            for index = #joints + 1, #drawing.skel do
+                drawing.skel[index].Visible = false
+            end
+        end
+    end
+
+    if settings.tracers.on then
+        local originY = viewport.Y
+        if settings.tracers.origin == "Cima" or settings.tracers.origin == "Topo" then
+            originY = 0
+        elseif settings.tracers.origin == "Centro" then
+            originY = viewport.Y / 2
+        end
+        lineTo(
+            drawing.tracer,
+            viewport.X / 2,
+            originY,
+            centerX,
+            settings.tracers.origin == "Cima" and top or bottom,
+            settings.tracers.thick,
+            nearest and nearestColor or settings.tracers.color
+        )
+    end
+end
+
+local function addHumanoid(humanoid)
+    if not humanoid or not humanoid:IsA("Humanoid") then
+        return
+    end
+    local model = humanoid.Parent
+    if not model or not model:IsA("Model") or not model:IsDescendantOf(Workspace) then
+        return
+    end
+    if model:FindFirstAncestorWhichIsA("ViewportFrame") then
+        return
+    end
+    local rootPart = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+    if not rootPart or not rootPart:IsA("BasePart") then
+        return
+    end
+    if not isPlayerOwned(model) then
+        npcs[model] = humanoid
+    end
+end
+
+local function startNpcScan()
+    if npcScanStarted then
+        return
+    end
+    npcScanStarted = true
+
+    task.spawn(function()
+        local count = 0
+        for _, descendant in ipairs(Workspace:GetDescendants()) do
+            addHumanoid(descendant)
+            count += 1
+            if count % 400 == 0 then
+                task.wait()
+            end
+        end
+    end)
+
+    npcScanConnection = Workspace.DescendantAdded:Connect(function(descendant)
+        if descendant:IsA("Humanoid") then
+            task.defer(addHumanoid, descendant)
+        end
+    end)
+end
+
+local function gatherPlayers(output)
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local character = player.Character
+            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+            local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+            if character and humanoid and rootPart then
+                output[#output + 1] = {
+                    model = character,
+                    hum = humanoid,
+                    hrp = rootPart,
+                    player = player,
+                    name = player.DisplayName ~= "" and player.DisplayName or player.Name,
+                    stableId = tostring(player.UserId),
+                }
+            end
+        end
+    end
+end
+
+local function cleanupNpcs()
+    for model in pairs(npcs) do
+        if not model.Parent or not model:IsDescendantOf(Workspace) then
+            npcs[model] = nil
+        end
+    end
+end
+
+local function gatherNpcs(output)
+    startNpcScan()
+    for model, humanoid in pairs(npcs) do
+        if not model.Parent or not model:IsDescendantOf(Workspace) then
+            npcs[model] = nil
+        elseif not isPlayerOwned(model) and model ~= LocalPlayer.Character then
+            local rootPart = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+            if rootPart and rootPart:IsA("BasePart") and humanoid.Parent then
+                output[#output + 1] = {
+                    model = model,
+                    hum = humanoid,
+                    hrp = rootPart,
+                    player = nil,
+                    name = model.Name,
+                    stableId = tostring(model),
+                }
+            end
+        end
+    end
+end
+
+local function candidateSettings(candidate)
+    local lib = library()
+    return lib and lib.ESP and lib.ESP[candidate.kind]
+end
+
+local function renderFrame()
+    if not runtime or stopped then
+        return
+    end
+
+    local lib = library()
+    if not lib or lib.Panic then
+        runtime:forEachKind("Jogador", hideDraw)
+        runtime:forEachKind("NPCs", hideDraw)
+        return
+    end
+
+    local camera = Workspace.CurrentCamera
+    if not camera then
+        return
+    end
+    local viewport = camera.ViewportSize
+    cleanupNpcs()
+    local playerCandidates, npcCandidates = {}, {}
+
+    local playerSettings = lib.ESP and lib.ESP.Jogador
+    if playerSettings and playerSettings.enabled and anyFeatureEnabled(playerSettings) then
+        gatherPlayers(playerCandidates)
+    end
+
+    local npcSettings = lib.ESP and lib.ESP.NPCs
+    if npcSettings and npcSettings.enabled and anyFeatureEnabled(npcSettings) then
+        gatherNpcs(npcCandidates)
+    end
+
+    local reconciled = ESPLogic.reconcileCandidates(playerCandidates, npcCandidates, LocalPlayer.Character)
+    local visible = {}
+
+    for _, entry in ipairs(reconciled) do
+        local candidate = entry.candidate
+        local settings = candidateSettings(entry)
+        if candidate.model and candidate.model.Parent and candidate.hum and candidate.hum.Parent then
+            local rootPart = candidate.hrp
+            if rootPart and rootPart.Parent and rootPart:IsA("BasePart")
+                and ESPConfig.shouldIncludeTarget(candidate, LocalPlayer, settings)
+            then
+                candidate.studs = (rootPart.Position - camera.CFrame.Position).Magnitude
+                candidate.m = candidate.studs * 0.28
+                if candidate.m <= settings.maxDist then
+                    visible[#visible + 1] = candidate
+                end
+            end
+        end
+    end
+
+    local selected = ESPLogic.selectTargets(visible, MAX_TARGETS)
+    local seen = {}
+
+    for index, candidate in ipairs(selected) do
+        local model = candidate.model
+        seen[model] = true
+        local drawing = runtime:getDrawing(model)
+        if not drawing then
+            drawing = newDraw()
+            drawing.model = model
+        end
+        runtime:register(model, candidate.kind, drawing)
+        drawing.kind = candidate.kind
+
+        local settings = candidateSettings(candidate)
+        if settings.highlight.on then
+            local highlight = runtime:ensureHighlight(model, function()
+                local instance = make("Highlight", {
+                    DepthMode = Enum.HighlightDepthMode.AlwaysOnTop,
+                    Enabled = false,
+                }, markHolder)
+                return instance
+            end)
+            drawing.hl = highlight
+        elseif drawing.hl then
+            drawing.hl.Enabled = false
+        end
+        drawTarget(drawing, candidate, settings, camera, viewport, index == 1)
+    end
+
+    runtime:forEachKind("Jogador", function(drawing)
+        if not seen[drawing.model] then
+            hideDraw(drawing)
+            if drawing.model and not drawing.model.Parent then
+                modelHeights[drawing.model] = nil
+                runtime:release(drawing.model)
+            end
+        end
+    end)
+    runtime:forEachKind("NPCs", function(drawing)
+        if not seen[drawing.model] then
+            hideDraw(drawing)
+            if drawing.model and not drawing.model.Parent then
+                modelHeights[drawing.model] = nil
+                runtime:release(drawing.model)
+            end
+        end
+    end)
+end
+
+local function onConfigChanged(kind, path, value)
+    if not runtime then
+        return
+    end
+
+    if path == "enabled" and value == false then
+        runtime:releaseKind(kind)
+        return
+    end
+
+    local feature = featureFromPath(path)
+    if feature and value == false then
+        runtime:hideFeature(kind, feature)
+    end
+
+    renderFrame()
+end
+
+function Engine.start()
+    if started then
+        return true
+    end
+
+    local state = globalState()
+    if state and state.BBC_HUB and state.BBC_HUB.ESP
+        and type(state.BBC_HUB.ESP.stop) == "function"
+        and state.BBC_HUB.ESP.instance ~= Engine
+    then
+        pcall(function() state.BBC_HUB.ESP.stop() end)
+    end
+
+    local lib = library()
+    if not lib or not ESPConfig or not ESPLogic or not ESPRuntime then
+        log("dependências indisponíveis")
+        return false
+    end
+    ensureConfig()
+
+    local parent = guiParent()
+    if not parent then
+        log("PlayerGui indisponível")
+        return false
+    end
+
+    espGui = make("ScreenGui", {
+        Name = "BBCESP",
+        ResetOnSpawn = false,
+        IgnoreGuiInset = true,
+        DisplayOrder = 990,
+    }, parent)
+    markHolder = make("Folder", { Name = "BBCMarks" }, Workspace)
+
+    runtime = ESPRuntime.new()
+    if not bindCloseRegistered and game.BindToClose then
+        bindCloseRegistered = true
+        game:BindToClose(function()
+            Engine.stop()
+        end)
+    end
+    started = true
+    stopped = false
+    errorCount = 0
+    unsubscribeConfig = ESPConfig.onChange(onConfigChanged)
+    if lib.OnPanic then
+        unsubscribePanic = lib:OnPanic(function(isPanic)
+            if not isPanic then
+                renderFrame()
+                return
+            end
+            if runtime then
+                runtime:forEachKind("Jogador", hideDraw)
+                runtime:forEachKind("NPCs", hideDraw)
+            end
+        end)
+    end
+
+    local function releasePlayerCharacter(player)
+        if player and player.Character and runtime then
+            runtime:release(player.Character)
+        end
+    end
+
+    local function hookPlayer(player)
+        if not player or hookedPlayers[player] then
+            return
+        end
+        hookedPlayers[player] = true
+        if player.CharacterRemoving then
+            table.insert(playerConnections, player.CharacterRemoving:Connect(function(character)
+                if runtime then
+                    runtime:release(character)
+                end
+            end))
+        end
+    end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        hookPlayer(player)
+    end
+    table.insert(playerConnections, Players.PlayerAdded:Connect(hookPlayer))
+    table.insert(playerConnections, Players.PlayerRemoving:Connect(releasePlayerCharacter))
+
+    renderConnection = RunService.RenderStepped:Connect(function()
+        if stopped then
+            return
+        end
+        local ok, err = pcall(renderFrame)
+        if not ok then
+            errorCount += 1
+            log(tostring(err))
+            if errorCount >= 5 then
+                stopped = true
+                runtime:forEachKind("Jogador", hideDraw)
+                runtime:forEachKind("NPCs", hideDraw)
+                if lib.Notify then
+                    lib:Notify({
+                        Title = "BBC HUB",
+                        Content = "O ESP parou por causa de um erro (veja o console).",
+                        Duration = 5,
+                    })
+                end
+            end
+        end
+    end)
+
+    if state then
+        state.BBC_HUB = state.BBC_HUB or {}
+        state.BBC_HUB.ESP = {
+            instance = Engine,
+            stop = Engine.stop,
+        }
+    end
+
+    return true
+end
+
+function Engine.stop()
+    stopped = true
+    started = false
+
+    if renderConnection then
+        renderConnection:Disconnect()
+        renderConnection = nil
+    end
+    if npcScanConnection then
+        npcScanConnection:Disconnect()
+        npcScanConnection = nil
+    end
+    for _, connection in ipairs(playerConnections) do
+        connection:Disconnect()
+    end
+    table.clear(playerConnections)
+    table.clear(hookedPlayers)
+    if unsubscribeConfig then
+        unsubscribeConfig()
+        unsubscribeConfig = nil
+    end
+    if unsubscribePanic then
+        unsubscribePanic()
+        unsubscribePanic = nil
+    end
+    if runtime then
+        runtime:destroyAll()
+        runtime = nil
+    end
+    if espGui then
+        espGui:Destroy()
+        espGui = nil
+    end
+    if markHolder then
+        markHolder:Destroy()
+        markHolder = nil
+    end
+    npcScanStarted = false
+    table.clear(npcs)
+end
+
+function Engine.register()
+    if registered then
+        return true
+    end
+
+    local lib = library()
+    if not lib or not ESPConfig then
+        return false
+    end
+    ensureConfig()
+    lib.Features = lib.Features or {}
+
+    local function setMaster(kind, enabled)
+        ESPConfig.set(kind, "enabled", enabled == true)
+        Engine.start()
+    end
+
+    lib.Features["Jogador"] = function(enabled)
+        setMaster("Jogador", enabled)
+    end
+    lib.Features["NPCs"] = function(enabled)
+        setMaster("NPCs", enabled)
+    end
+    lib.Features["Corpo"] = function(enabled)
+        setMaster("Corpo", enabled)
+    end
+    lib.Features["Recipiente"] = function(enabled)
+        setMaster("Recipiente", enabled)
+    end
+    lib.Features["Item no chão"] = function(enabled)
+        setMaster("Item no chão", enabled)
+    end
+    lib.Features["Itens de missão"] = function(enabled)
+        setMaster("Itens de missão", enabled)
+    end
+
+    local legacyFeatures = {
+        { "Destaque", "highlight" },
+        { "Caixa", "box" },
+        { "Nome", "name" },
+        { "Barra de vida", "healthbar" },
+        { "Vida", "health" },
+        { "Distância", "distance" },
+        { "Linhas", "tracers" },
+        { "Esqueleto", "skeleton" },
+    }
+    for _, entry in ipairs(legacyFeatures) do
+        lib.Features[entry[1]] = function(enabled)
+            ESPConfig.set("Jogador", entry[2] .. ".on", enabled == true)
+            Engine.start()
+        end
+    end
+
+    lib.Features["Destaque próprio"] = function(enabled)
+        ESPConfig.set("Jogador", "nearest.on", enabled == true)
+    end
+
+    registered = true
+
+    -- The row state in the visuals tab is created before this deferred
+    -- registration can run. Mirror that state into the canonical ESP config.
+    for _, kind in ipairs({ "Jogador", "NPCs", "Corpo", "Recipiente", "Item no chão", "Itens de missão" }) do
+        if lib.FS[kind] ~= nil then
+            ESPConfig.set(kind, "enabled", lib.FS[kind] == true)
+        end
+    end
+
+    Engine.start()
+    return true
+end
+
+function Engine.setFeature(kind, feature, enabled)
+    if not ESPConfig then
+        return false
+    end
+    local value = ESPConfig.set(kind, feature .. ".on", enabled == true)
+    Engine.start()
+    return value ~= nil
+end
+
+function Engine.isStarted()
+    return started == true
+end
+
+BBC.Features.ESPEngine = Engine
+return Engine
+
+end)
+
+-- ============================================================
+-- módulo: features.esp_preview  (features/esp_preview.lua)
+-- ============================================================
+__module("features.esp_preview", function(BBC)
+--!strict
+--[[
+    BBC HUB - Live R6 ESP preview
+
+    The preview reads the same configuration used by the in-game ESP engine.
+    It is intentionally instance-based so it remains compatible with mobile
+    executors that do not expose the Drawing API.
+]]
+
+local Preview = {}
+
+local Utils = BBC.Utils
+local Library = BBC.Library
+local ESPLogic = BBC.Modules["utils.esp_logic"]
+local UserInputService = game:GetService("UserInputService")
+
+local create = Utils.create
+local corner = Utils.corner
+local stroke = Utils.stroke
+
+local BLACK = Color3.fromRGB(0, 0, 0)
+local WHITE = Color3.fromRGB(242, 242, 242)
+local CYAN = Color3.fromRGB(45, 205, 190)
+
+local function clampHealth(value)
+    return math.clamp(tonumber(value) or 0, 0, 100)
+end
+
+local function healthRatio(value)
+    return clampHealth(value) / 100
+end
+
+local function healthColor(settings, ratio)
+    if not settings.healthbar.auto then
+        return settings.healthbar.color
+    end
+    if ratio > 0.6 then
+        return CYAN
+    elseif ratio > 0.3 then
+        return Color3.fromRGB(240, 200, 60)
+    end
+    return Color3.fromRGB(240, 80, 70)
+end
+
+local function formatDistance(settings, distance)
+    if settings.distance.unit == "studs" then
+        return tostring(math.floor(distance)) .. " st"
+    end
+    return tostring(math.floor(distance)) .. "m"
+end
+
+function Preview.build(previewContainer, initialSettings)
+    local settings = initialSettings or {}
+    local state = {
+        enabled = settings.enabled == true,
+        previewHealth = settings.prevHp or 100,
+        previewDistance = settings.prevDist or 1133,
+        dragOffsets = {},
+    }
+
+    local holder = create("Frame", {
+        Name = "PreviewHolder",
+        BackgroundTransparency = 1,
+        Size = UDim2.fromOffset(100, 108),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.3),
+    }, previewContainer)
+
+    local chamsParts = {}
+    local chamsStrokes = {}
+
+    local function createChamsPart(name, size, position, cornerRadius)
+        local part = create("Frame", {
+            Name = name,
+            BackgroundColor3 = settings.highlight and settings.highlight.color or WHITE,
+            BackgroundTransparency = settings.highlight and settings.highlight.fillTransparency or 0.55,
+            Size = size,
+            Position = position,
+            BorderSizePixel = 0,
+            ZIndex = 2,
+        }, holder)
+        corner(part, cornerRadius or 4)
+
+        -- Subtle vertical shading gives the R6 silhouette depth while the
+        -- border remains a crisp, fully opaque 1px black outline.
+        create("UIGradient", {
+            Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(185, 185, 185)),
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0),
+                NumberSequenceKeypoint.new(1, 0.24),
+            }),
+            Rotation = 0,
+        }, part)
+
+        local outline = create("UIStroke", {
+            Thickness = 1,
+            Transparency = 0,
+            Color = BLACK,
+            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+        }, part)
+
+        chamsParts[name] = part
+        chamsStrokes[name] = outline
+        return part
+    end
+
+    createChamsPart("Head", UDim2.fromScale(0.28, 0.18), UDim2.fromScale(0.36, 0.02), 8)
+    local torso = createChamsPart("Torso", UDim2.fromScale(0.46, 0.36), UDim2.fromScale(0.27, 0.22), 4)
+    createChamsPart("LeftArm", UDim2.fromScale(0.20, 0.36), UDim2.fromScale(0.04, 0.22), 4)
+    createChamsPart("RightArm", UDim2.fromScale(0.20, 0.36), UDim2.fromScale(0.76, 0.22), 4)
+    createChamsPart("LeftLeg", UDim2.fromScale(0.21, 0.38), UDim2.fromScale(0.27, 0.60), 4)
+    createChamsPart("RightLeg", UDim2.fromScale(0.21, 0.38), UDim2.fromScale(0.52, 0.60), 4)
+
+    -- Centered BBC HUB badge.
+    local badge = create("Frame", {
+        Name = "BBCBadge",
+        BackgroundColor3 = BLACK,
+        BackgroundTransparency = 0.18,
+        Size = UDim2.fromScale(0.84, 0.40),
+        Position = UDim2.fromScale(0.5, 0.5),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        BorderSizePixel = 0,
+        ZIndex = 3,
+    }, torso)
+    corner(badge, 3)
+    create("UIStroke", {
+        Thickness = 1,
+        Transparency = 0.15,
+        Color = WHITE,
+    }, badge)
+    create("TextLabel", {
+        Name = "BBCLogo",
+        BackgroundTransparency = 1,
+        Size = UDim2.fromScale(1, 1),
+        Text = "BBC HUB",
+        TextColor3 = WHITE,
+        TextScaled = true,
+        FontFace = (Library.Fonts and Library.Fonts.Bold) or Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        ZIndex = 4,
+    }, badge)
+
+    local floorShadow = create("Frame", {
+        Name = "FloorShadow",
+        BackgroundColor3 = BLACK,
+        BackgroundTransparency = 0.55,
+        BorderSizePixel = 0,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 1.0),
+        Size = UDim2.fromScale(0.64, 0.05),
+        ZIndex = 1,
+    }, holder)
+    create("UICorner", { CornerRadius = UDim.new(1, 0) }, floorShadow)
+    create("UIGradient", {
+        Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 1),
+            NumberSequenceKeypoint.new(0.5, 0),
+            NumberSequenceKeypoint.new(1, 1),
+        }),
+    }, floorShadow)
+
+    local dragLayer = create("Frame", {
+        Name = "PreviewOverlayLayer",
+        BackgroundTransparency = 1,
+        Size = UDim2.fromScale(1, 1),
+        Active = true,
+        ZIndex = 3,
+    }, holder)
+
+    local boundingBox = create("Frame", {
+        Name = "BoundingBox",
+        BackgroundTransparency = 1,
+        Size = UDim2.fromScale(1, 1),
+        BorderSizePixel = 0,
+        ZIndex = 3,
+    }, dragLayer)
+    local boxStroke = stroke(boundingBox, "Accent", 0, 1)
+    boxStroke.Thickness = 1
+
+    local boxCorners = {}
+    for index = 1, 8 do
+        boxCorners[index] = create("Frame", {
+            Name = "BoxCorner" .. index,
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Visible = false,
+            ZIndex = 4,
+        }, dragLayer)
+    end
+
+    local joints = {
+        HeadTop = Vector2.new(0.5, 0.02),
+        Neck = Vector2.new(0.5, 0.21),
+        LeftShoulder = Vector2.new(0.27, 0.22),
+        RightShoulder = Vector2.new(0.73, 0.22),
+        LeftElbow = Vector2.new(0.14, 0.40),
+        RightElbow = Vector2.new(0.86, 0.40),
+        LeftHand = Vector2.new(0.14, 0.58),
+        RightHand = Vector2.new(0.86, 0.58),
+        Pelvis = Vector2.new(0.5, 0.59),
+        LeftKnee = Vector2.new(0.375, 0.78),
+        RightKnee = Vector2.new(0.625, 0.78),
+        LeftFoot = Vector2.new(0.375, 0.98),
+        RightFoot = Vector2.new(0.625, 0.98),
+    }
+    local jointPairs = {
+        { joints.HeadTop, joints.Neck },
+        { joints.Neck, joints.Pelvis },
+        { joints.LeftShoulder, joints.RightShoulder },
+        { joints.LeftShoulder, joints.LeftElbow },
+        { joints.LeftElbow, joints.LeftHand },
+        { joints.RightShoulder, joints.RightElbow },
+        { joints.RightElbow, joints.RightHand },
+        { joints.Pelvis, joints.LeftKnee },
+        { joints.LeftKnee, joints.LeftFoot },
+        { joints.Pelvis, joints.RightKnee },
+        { joints.RightKnee, joints.RightFoot },
+    }
+
+    local function lineGeometry(first, second, width, height)
+        local deltaX = (second.X - first.X) * width
+        local deltaY = (second.Y - first.Y) * height
+        return math.sqrt(deltaX * deltaX + deltaY * deltaY), math.deg(math.atan2(deltaY, deltaX))
+    end
+
+    local function positionLine(frame, first, second, thickness)
+        local length, angle = lineGeometry(first, second, holder.AbsoluteSize.X, holder.AbsoluteSize.Y)
+        frame.Size = UDim2.fromOffset(length, thickness)
+        frame.Position = UDim2.fromScale(first.X, first.Y)
+        frame.Rotation = angle
+    end
+
+    local skeletonLines = {}
+    for index, pair in ipairs(jointPairs) do
+        local line = create("Frame", {
+            Name = "SkeletonLine" .. index,
+            BackgroundColor3 = WHITE,
+            BorderSizePixel = 0,
+            Size = UDim2.fromOffset(1, 1),
+            AnchorPoint = Vector2.new(0, 0.5),
+            ZIndex = 4,
+        }, holder)
+        positionLine(line, pair[1], pair[2], 1.5)
+        skeletonLines[index] = line
+    end
+
+    local jointDots = {}
+    for name, point in pairs(joints) do
+        local dot = create("Frame", {
+            Name = "Joint_" .. name,
+            BackgroundColor3 = WHITE,
+            BorderSizePixel = 0,
+            Size = UDim2.fromOffset(4, 4),
+            Position = UDim2.fromScale(point.X, point.Y),
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            ZIndex = 5,
+        }, holder)
+        corner(dot, 2)
+        create("UIStroke", {
+            Thickness = 1,
+            Color = BLACK,
+            Transparency = 0,
+        }, dot)
+        jointDots[name] = dot
+    end
+
+    local healthBarBg = create("Frame", {
+        Name = "HealthBarBg",
+        BackgroundColor3 = BLACK,
+        BackgroundTransparency = 0.35,
+        BorderSizePixel = 0,
+        Size = UDim2.new(0, 4, 1, 0),
+        Position = UDim2.fromScale(0, 0),
+        AnchorPoint = Vector2.new(1, 0),
+        ZIndex = 4,
+        Visible = false,
+    }, dragLayer)
+    local healthBarFill = create("Frame", {
+        Name = "HealthBarFill",
+        BackgroundColor3 = CYAN,
+        BorderSizePixel = 0,
+        AnchorPoint = Vector2.new(0, 1),
+        Position = UDim2.fromScale(0, 1),
+        Size = UDim2.fromScale(1, 1),
+        ZIndex = 5,
+    }, healthBarBg)
+
+    local healthLabel = create("TextLabel", {
+        Name = "HealthLabel",
+        BackgroundTransparency = 1,
+        Size = UDim2.fromOffset(32, 14),
+        Position = UDim2.fromScale(0, 0.5),
+        AnchorPoint = Vector2.new(0, 0.5),
+        Text = "100",
+        TextColor3 = WHITE,
+        TextSize = 10,
+        FontFace = (Library.Fonts and Library.Fonts.Medium) or Enum.Font.GothamMedium,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        TextStrokeTransparency = 0.3,
+        TextStrokeColor3 = BLACK,
+        ZIndex = 6,
+    }, dragLayer)
+
+    local nameLabel = create("TextLabel", {
+        Name = "NameLabel",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 18),
+        Position = UDim2.fromScale(0.5, -0.03),
+        AnchorPoint = Vector2.new(0.5, 1),
+        Text = "Jogador",
+        TextColor3 = WHITE,
+        TextSize = 16,
+        FontFace = (Library.Fonts and Library.Fonts.Bold) or Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        TextStrokeTransparency = 0.3,
+        TextStrokeColor3 = BLACK,
+        ZIndex = 6,
+    }, dragLayer)
+
+    local distanceLabel = create("TextLabel", {
+        Name = "DistanceLabel",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 14),
+        Position = UDim2.fromScale(0.5, 1.03),
+        AnchorPoint = Vector2.new(0.5, 0),
+        Text = "1133m",
+        TextColor3 = WHITE,
+        TextSize = 10,
+        FontFace = (Library.Fonts and Library.Fonts.Medium) or Enum.Font.GothamMedium,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        TextStrokeTransparency = 0.3,
+        TextStrokeColor3 = BLACK,
+        ZIndex = 6,
+    }, dragLayer)
+
+    local tracer = create("Frame", {
+        Name = "Tracer",
+        BackgroundColor3 = WHITE,
+        BorderSizePixel = 0,
+        Size = UDim2.fromOffset(1, 1),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Visible = false,
+        ZIndex = 4,
+    }, dragLayer)
+
+    local function updateSkeletonGeometry()
+        for index, pair in ipairs(jointPairs) do
+            positionLine(skeletonLines[index], pair[1], pair[2], settings.skeleton and settings.skeleton.thick or 1.5)
+        end
+    end
+
+    local function updateHealthBar()
+        local ratio = healthRatio(state.previewHealth)
+        local width = settings.healthbar and settings.healthbar.width or 4
+        local onRight = settings.healthbar and settings.healthbar.side == "Direita"
+        healthBarBg.Size = UDim2.new(0, width, 1, 0)
+        healthBarBg.AnchorPoint = onRight and Vector2.new(0, 0) or Vector2.new(1, 0)
+        healthBarBg.Position = onRight and UDim2.fromScale(1, 0) or UDim2.fromScale(0, 0)
+        healthBarFill.Size = UDim2.fromScale(1, ratio)
+        healthBarFill.BackgroundColor3 = healthColor(settings, ratio)
+        healthLabel.Text = tostring(math.floor(clampHealth(state.previewHealth)))
+        healthLabel.AnchorPoint = onRight and Vector2.new(0, 0.5) or Vector2.new(1, 0.5)
+        healthLabel.Position = onRight
+            and UDim2.fromScale(1.03, 0.5)
+            or UDim2.fromScale(-0.03, 0.5)
+        healthLabel.TextXAlignment = onRight and Enum.TextXAlignment.Left or Enum.TextXAlignment.Right
+    end
+
+    local function updateBoxCorners()
+        local cornerSize = settings.box and settings.box.corner or 14
+        local width = holder.AbsoluteSize.X
+        local height = holder.AbsoluteSize.Y
+        local length = math.min(cornerSize, width / 2, height / 2)
+        local thickness = settings.box and settings.box.thick or 1
+        local segments = {
+            { 0, 0, length, thickness },
+            { 0, 0, thickness, length },
+            { width - length, 0, length, thickness },
+            { width - thickness, 0, thickness, length },
+            { 0, height - thickness, length, thickness },
+            { 0, height - length, thickness, length },
+            { width - length, height - thickness, length, thickness },
+            { width - thickness, height - length, thickness, length },
+        }
+        for index = 1, 8 do
+            local frame = boxCorners[index]
+            local segment = segments[index]
+            frame.Position = UDim2.fromOffset(segment[1], segment[2])
+            frame.Size = UDim2.fromOffset(segment[3], segment[4])
+            frame.BackgroundColor3 = settings.box and settings.box.color or WHITE
+            frame.BackgroundTransparency = settings.box and (1 - settings.box.alpha) or 0.5
+        end
+    end
+
+    local function updateTracer()
+        local origin = Vector2.new(0.5, 1.08)
+        local target = Vector2.new(0.5, 0.56)
+        local length, angle = lineGeometry(origin, target, holder.AbsoluteSize.X, holder.AbsoluteSize.Y)
+        tracer.Size = UDim2.fromOffset(length, settings.tracers and settings.tracers.thick or 1)
+        tracer.Position = UDim2.fromScale((origin.X + target.X) / 2, (origin.Y + target.Y) / 2)
+        tracer.Rotation = angle
+        tracer.BackgroundColor3 = settings.tracers and settings.tracers.color or WHITE
+    end
+
+    local function applyVisibility()
+        local enabled = state.enabled
+        local highlightOn = enabled and settings.highlight and settings.highlight.on
+        local boxOn = enabled and settings.box and settings.box.on
+        local nameOn = enabled and settings.name and settings.name.on
+        local healthBarOn = enabled and settings.healthbar and settings.healthbar.on
+        local healthOn = enabled and settings.health and settings.health.on
+        local distanceOn = enabled and settings.distance and settings.distance.on
+        local tracerOn = enabled and settings.tracers and settings.tracers.on
+        local skeletonOn = enabled and settings.skeleton and settings.skeleton.on
+
+        for _, part in pairs(chamsParts) do
+            part.Visible = highlightOn == true
+        end
+        boundingBox.Visible = boxOn == true
+        for _, frame in ipairs(boxCorners) do
+            frame.Visible = false
+        end
+        if boxOn and settings.box.style == "Cantos" then
+            for _, frame in ipairs(boxCorners) do
+                frame.Visible = true
+            end
+        end
+        nameLabel.Visible = nameOn == true
+        healthBarBg.Visible = healthBarOn == true
+        healthLabel.Visible = healthOn == true
+        distanceLabel.Visible = distanceOn == true
+        tracer.Visible = tracerOn == true
+        for _, line in ipairs(skeletonLines) do
+            line.Visible = skeletonOn == true
+        end
+        for _, dot in pairs(jointDots) do
+            dot.Visible = skeletonOn == true
+        end
+    end
+
+    local function applySettings(nextSettings)
+        if type(nextSettings) == "table" then
+            settings = nextSettings
+        end
+        state.enabled = settings.enabled == true
+        state.previewHealth = clampHealth(settings.prevHp or state.previewHealth)
+        state.previewDistance = tonumber(settings.prevDist) or state.previewDistance
+
+        if settings.highlight then
+            for _, part in pairs(chamsParts) do
+                part.BackgroundColor3 = settings.highlight.color
+                part.BackgroundTransparency = settings.highlight.fillTransparency
+            end
+        end
+        if settings.box then
+            boxStroke.Color = settings.box.color
+            boxStroke.Thickness = settings.box.thick
+            boxStroke.Transparency = 1 - settings.box.alpha
+        end
+        if settings.name then
+            local nameSize = ESPLogic.scaledTextSize(settings, settings.name.size)
+            nameLabel.TextColor3 = settings.name.color
+            nameLabel.TextSize = nameSize
+            nameLabel.Size = UDim2.new(1, 0, 0, nameSize + 4)
+            nameLabel.TextStrokeTransparency = settings.name.outline and 0.3 or 1
+        end
+        if settings.health then
+            local healthSize = ESPLogic.scaledTextSize(settings, settings.health.size)
+            healthLabel.TextColor3 = settings.health.color
+            healthLabel.TextSize = healthSize
+            healthLabel.Size = UDim2.fromOffset(math.max(32, healthSize + 18), healthSize + 2)
+        end
+        if settings.distance then
+            local distanceSize = ESPLogic.scaledTextSize(settings, settings.distance.size)
+            distanceLabel.TextColor3 = settings.distance.color
+            distanceLabel.TextSize = distanceSize
+            distanceLabel.Size = UDim2.new(1, 0, 0, distanceSize + 2)
+            distanceLabel.TextStrokeTransparency = settings.distance.outline and 0.3 or 1
+            distanceLabel.Text = formatDistance(settings, state.previewDistance)
+        end
+        if settings.tracers then
+            tracer.BackgroundColor3 = settings.tracers.color
+        end
+        if settings.skeleton then
+            for _, line in ipairs(skeletonLines) do
+                line.BackgroundColor3 = settings.skeleton.color
+            end
+            for _, dot in pairs(jointDots) do
+                dot.BackgroundColor3 = settings.skeleton.color
+            end
+        end
+
+        updateHealthBar()
+        updateBoxCorners()
+        updateSkeletonGeometry()
+        updateTracer()
+        applyVisibility()
+    end
+
+    local dragging = false
+    local dragStart = nil
+    local startPosition = nil
+    local locked = false
+
+    dragLayer.InputBegan:Connect(function(input)
+        local inputType = input.UserInputType
+        if locked then return end
+        if inputType == Enum.UserInputType.MouseButton1 or inputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPosition = dragLayer.Position
+        end
+    end)
+    dragLayer.InputChanged:Connect(function(input)
+        local inputType = input.UserInputType
+        if dragging and (inputType == Enum.UserInputType.MouseMovement or inputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            dragLayer.Position = UDim2.new(
+                startPosition.X.Scale,
+                startPosition.X.Offset + delta.X,
+                startPosition.Y.Scale,
+                startPosition.Y.Offset + delta.Y
+            )
+            state.dragOffsets = {
+                X = dragLayer.Position.X.Offset,
+                Y = dragLayer.Position.Y.Offset,
+            }
+        end
+    end)
+    local inputEndedConnection = UserInputService.InputEnded:Connect(function(input)
+        local inputType = input.UserInputType
+        if dragging and (inputType == Enum.UserInputType.MouseButton1 or inputType == Enum.UserInputType.Touch) then
+            dragging = false
+        end
+    end)
+
+    local sizeConnection = holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+        updateSkeletonGeometry()
+        updateBoxCorners()
+        updateTracer()
+    end)
+
+    local function disconnectExternalConnections()
+        if inputEndedConnection then
+            inputEndedConnection:Disconnect()
+            inputEndedConnection = nil
+        end
+        if sizeConnection then
+            sizeConnection:Disconnect()
+            sizeConnection = nil
+        end
+    end
+    holder.Destroying:Connect(disconnectExternalConnections)
+
+    local controller = {}
+
+    function controller.ApplySettings(nextSettings)
+        applySettings(nextSettings)
+    end
+
+    function controller.SetEnabled(enabled)
+        state.enabled = enabled == true
+        applyVisibility()
+    end
+
+    function controller.SetLocked(value)
+        locked = value == true
+        if locked then
+            dragging = false
+        end
+    end
+
+    function controller.IsLocked()
+        return locked
+    end
+
+    function controller.ResetLayout()
+        dragLayer.Position = UDim2.fromScale(0, 0)
+        state.dragOffsets = { X = 0, Y = 0 }
+    end
+
+    function controller.SetPreviewHealth(value)
+        state.previewHealth = clampHealth(value)
+        updateHealthBar()
+    end
+
+    function controller.SetPreviewDistance(value)
+        state.previewDistance = tonumber(value) or 0
+        distanceLabel.Text = formatDistance(settings, state.previewDistance)
+    end
+
+    function controller.GetDragOffsets()
+        return state.dragOffsets
+    end
+
+    function controller.SetDragOffsets(offsets)
+        if type(offsets) == "table" and type(offsets.X) == "number" and type(offsets.Y) == "number" then
+            state.dragOffsets = offsets
+            dragLayer.Position = UDim2.new(0, offsets.X, 0, offsets.Y)
+        end
+    end
+
+    applySettings(settings)
+    return controller
+end
+
+Preview.healthRatio = healthRatio
+Preview.formatDistance = formatDistance
+
+return Preview
+
+end)
+
+-- ============================================================
 -- módulo: features.visuals  (features/visuals.lua)
 -- ============================================================
 __module("features.visuals", function(BBC)
@@ -5030,8 +7267,8 @@ local S = Controls.S
 
 local Library = BBC.Library
 local Utils = BBC.Utils
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
+local ESPConfig = BBC.Modules["utils.esp_config"]
+local ESPPreview = BBC.Modules["features.esp_preview"]
 
 -- Defensive: Ensure Library.Fonts exists before any UI code accesses it
 local InitUtils = BBC.Modules["utils.init"]
@@ -5047,463 +7284,355 @@ local label = Utils.label
 local icon = Utils.icon
 local pad = Utils.pad
 local listLayout = Utils.listLayout
-local tween = Utils.tween
 
--- ============================================================
---  SetupCharacterPreview: 2D R6 Chams/ESP Preview Builder
---  Injeta a pré-visualização dentro de um Frame existente (previewContainer)
--- ============================================================
-local function SetupCharacterPreview(previewContainer)
-    -- Colors
-    local CHAMS_COLOR = Color3.fromRGB(255, 130, 0)
-    local CHAMS_TRANSPARENCY = 0.45
-    local STROKE_COLOR = Color3.fromRGB(0, 0, 0)
-    local STROKE_TRANSPARENCY = 0.35
-    local STROKE_THICKNESS = 1
-    local BOX_STROKE_COLOR = Color3.fromRGB(255, 140, 0)
-    local SKELETON_COLOR = Color3.fromRGB(255, 255, 255)
-    local SKELETON_THICKNESS = 1.5
-    local HEALTH_BAR_WIDTH = 4
-    local HEALTH_BAR_COLOR = Color3.fromRGB(45, 205, 190)
-    local HEALTH_BAR_BG = Color3.fromRGB(0, 0, 0)
-    local SHADOW_COLOR = Color3.fromRGB(0, 0, 0)
+local FEATURE_DEFINITIONS = {
+    { key = "highlight", label = "Destaque" },
+    { key = "box", label = "Caixa" },
+    { key = "name", label = "Nome" },
+    { key = "healthbar", label = "Barra de vida" },
+    { key = "health", label = "Vida" },
+    { key = "distance", label = "Distância" },
+    { key = "tracers", label = "Linhas" },
+    { key = "skeleton", label = "Esqueleto" },
+}
 
-    -- 1. Character Holder (reduzido e centralizado no terço superior, acima da grade 2x4)
-    local holder = create("Frame", {
-        Name = "PreviewHolder",
-        BackgroundTransparency = 1,
-        Size = UDim2.fromOffset(100, 108),
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.3),
-    }, previewContainer)
-
-    -- 2. R6 Chams Silhouette
-    local chamsParts = {}
-
-    local function createChamsPart(name, size, position, cornerRadius)
-        local part = create("Frame", {
-            Name = name,
-            BackgroundColor3 = CHAMS_COLOR,
-            BackgroundTransparency = CHAMS_TRANSPARENCY,
-            Size = size,
-            Position = position,
-            BorderSizePixel = 0,
-            ZIndex = 2,
-        }, holder)
-
-        corner(part, cornerRadius or 4)
-
-        -- Contorno escuro de 1px (independente do tema, igual ao outline do Chams no jogo)
-        create("UIStroke", {
-            Thickness = STROKE_THICKNESS,
-            Transparency = STROKE_TRANSPARENCY,
-            Color = STROKE_COLOR,
-            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-        }, part)
-
-        -- Add BBC HUB logo on Torso (asset se configurado; senão, logo em texto)
-        if name == "Torso" then
-            local logoAssetId = BBC.Config and BBC.Config.LogoAssetId
-            if logoAssetId and type(logoAssetId) == "string" and #logoAssetId > 0 then
-                local logo = create("ImageLabel", {
-                    Name = "BBCLogo",
-                    BackgroundTransparency = 1,
-                    Size = UDim2.fromScale(0.6, 0.6),
-                    Position = UDim2.fromScale(0.5, 0.5),
-                    AnchorPoint = Vector2.new(0.5, 0.5),
-                    Image = logoAssetId,
-                    ImageColor3 = Color3.fromRGB(255, 255, 255),
-                    ImageTransparency = 0.3,
-                    ScaleType = Enum.ScaleType.Fit,
-                    ZIndex = 3,
-                }, part)
-            else
-                create("TextLabel", {
-                    Name = "BBCLogo",
-                    BackgroundTransparency = 1,
-                    Size = UDim2.fromScale(0.92, 0.55),
-                    Position = UDim2.fromScale(0.5, 0.5),
-                    AnchorPoint = Vector2.new(0.5, 0.5),
-                    Text = "BBC HUB",
-                    TextColor3 = Color3.fromRGB(255, 255, 255),
-                    TextTransparency = 0.25,
-                    TextScaled = true,
-                    FontFace = (Library.Fonts and Library.Fonts.Bold) or Enum.Font.GothamBold,
-                    ZIndex = 3,
-                }, part)
-            end
-        end
-
-        chamsParts[name] = part
-        return part
-    end
-
-    createChamsPart("Head",     UDim2.fromScale(0.28, 0.18), UDim2.fromScale(0.36, 0.02), 8)
-    createChamsPart("Torso",    UDim2.fromScale(0.46, 0.36), UDim2.fromScale(0.27, 0.22), 4)
-    createChamsPart("LeftArm",  UDim2.fromScale(0.20, 0.36), UDim2.fromScale(0.04, 0.22), 4)
-    createChamsPart("RightArm", UDim2.fromScale(0.20, 0.36), UDim2.fromScale(0.76, 0.22), 4)
-    createChamsPart("LeftLeg",  UDim2.fromScale(0.21, 0.38), UDim2.fromScale(0.27, 0.60), 4)
-    createChamsPart("RightLeg", UDim2.fromScale(0.21, 0.38), UDim2.fromScale(0.52, 0.60), 4)
-
-    -- Sombra/glow sutil no chão (elipse escura sob os pés, atrás do boneco)
-    local floorShadow = create("Frame", {
-        Name = "FloorShadow",
-        BackgroundColor3 = SHADOW_COLOR,
-        BackgroundTransparency = 0.55,
-        BorderSizePixel = 0,
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 1.0),
-        Size = UDim2.fromScale(0.64, 0.05),
-        ZIndex = 1,
-    }, holder)
-    create("UICorner", { CornerRadius = UDim.new(1, 0) }, floorShadow)
-    create("UIGradient", {
-        Transparency = NumberSequence.new({
-            NumberSequenceKeypoint.new(0, 1),
-            NumberSequenceKeypoint.new(0.5, 0),
-            NumberSequenceKeypoint.new(1, 1),
-        }),
-    }, floorShadow)
-
-    -- 3. ESP Overlays
-    -- Bounding Box
-    local boundingBox = create("Frame", {
-        Name = "BoundingBox",
-        BackgroundTransparency = 1,
-        Size = UDim2.fromScale(1, 1),
-        Position = UDim2.fromScale(0, 0),
-        ZIndex = 3,
-    }, holder)
-
-    local boxStroke = stroke(boundingBox, "Accent", 0, 1)
-    boxStroke.Color = BOX_STROKE_COLOR
-
-    -- Skeleton Lines
-    local skeletonLines = {}
-
-    -- Juntas do esqueleto em escala 0-1 do holder (mesma base das partes do boneco).
-    -- Cada valor aponta para o CENTRO da articulação correspondente: pescoço na emenda
-    -- cabeça/tronco, mãos no centro dos braços, pés no centro das pernas.
-    local joints = {
-        HeadTop     = Vector2.new(0.5, 0.02),
-        Neck        = Vector2.new(0.5, 0.21),
-        LeftShoulder  = Vector2.new(0.27, 0.22),
-        RightShoulder = Vector2.new(0.73, 0.22),
-        LeftHand    = Vector2.new(0.14, 0.58),
-        RightHand   = Vector2.new(0.86, 0.58),
-        Pelvis      = Vector2.new(0.5, 0.59),
-        LeftFoot    = Vector2.new(0.375, 0.98),
-        RightFoot   = Vector2.new(0.625, 0.98),
-    }
-
-    -- Pares de juntas na ordem em que as linhas são criadas
-    local jointPairs = {
-        { joints.HeadTop, joints.Neck },
-        { joints.Neck, joints.Pelvis },
-        { joints.LeftShoulder, joints.RightShoulder },
-        { joints.LeftShoulder, joints.LeftHand },
-        { joints.RightShoulder, joints.RightHand },
-        { joints.Pelvis, joints.LeftFoot },
-        { joints.Pelvis, joints.RightFoot },
-    }
-
-    -- Comprimento/ângulo em PIXELS (antes usava a escala 0-1 e as linhas ficavam invisíveis)
-    local function lineSpec(p1, p2)
-        local abs = holder.AbsoluteSize
-        local dx = (p2.X - p1.X) * abs.X
-        local dy = (p2.Y - p1.Y) * abs.Y
-        return math.sqrt(dx * dx + dy * dy), math.deg(math.atan2(dy, dx))
-    end
-
-    local function drawLine(p1, p2)
-        local dist, angle = lineSpec(p1, p2)
-
-        local line = create("Frame", {
-            BackgroundColor3 = SKELETON_COLOR,
-            BorderSizePixel = 0,
-            Size = UDim2.fromOffset(dist, SKELETON_THICKNESS),
-            AnchorPoint = Vector2.new(0, 0.5),
-            Position = UDim2.fromScale(p1.X, p1.Y),
-            Rotation = angle,
-            ZIndex = 4,
-        }, holder)
-
-        skeletonLines[#skeletonLines + 1] = line
-        return line
-    end
-
-    local function buildSkeleton()
-        for _, pair in ipairs(jointPairs) do
-            drawLine(pair[1], pair[2])
-        end
-    end
-    buildSkeleton()
-
-    -- Health Bar (left side of box; altura em escala para não depender de AbsoluteSize)
-    local healthBarBg = create("Frame", {
-        Name = "HealthBarBg",
-        BackgroundColor3 = HEALTH_BAR_BG,
-        BackgroundTransparency = 0.35,
-        BorderSizePixel = 0,
-        Size = UDim2.new(0, HEALTH_BAR_WIDTH, 1, 0),
-        Position = UDim2.fromScale(0, 0),
-        AnchorPoint = Vector2.new(1, 0),
-        ZIndex = 3,
-        Visible = false,
-    }, holder)
-
-    local healthBarFill = create("Frame", {
-        Name = "HealthBarFill",
-        BackgroundColor3 = HEALTH_BAR_COLOR,
-        BorderSizePixel = 0,
-        AnchorPoint = Vector2.new(0, 1),
-        Position = UDim2.fromScale(0, 1),
-        Size = UDim2.fromScale(1, 1),
-        ZIndex = 4,
-    }, healthBarBg)
-
-    -- Labels
-    local nameLabel = create("TextLabel", {
-        Name = "NameLabel",
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 18),
-        Position = UDim2.fromScale(0.5, -0.03),
-        AnchorPoint = Vector2.new(0.5, 1),
-        Text = "Jogador",
-        TextColor3 = Color3.fromRGB(255, 255, 255),
-        TextSize = 16,
-        FontFace = Library.Fonts.Bold,
-        TextXAlignment = Enum.TextXAlignment.Center,
-        ZIndex = 5,
-    }, holder)
-
-    local nameStroke = stroke(nameLabel, "Stroke", 0, 1)
-    nameStroke.Color = Color3.fromRGB(0, 0, 0)
-
-    local distanceLabel = create("TextLabel", {
-        Name = "DistanceLabel",
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 14),
-        Position = UDim2.fromScale(0.5, 1.03),
-        AnchorPoint = Vector2.new(0.5, 0),
-        Text = "1133m",
-        TextColor3 = Color3.fromRGB(200, 200, 200),
-        TextSize = 10,
-        FontFace = Library.Fonts.Medium,
-        TextXAlignment = Enum.TextXAlignment.Center,
-        ZIndex = 5,
-    }, holder)
-
-    local distStroke = stroke(distanceLabel, "Stroke", 0, 1)
-    distStroke.Color = Color3.fromRGB(0, 0, 0)
-
-    -- 4. Controller API
-    local state = {
-        chams = true,
-        box = true,
-        skeleton = true,
-        name = true,
-        distance = true,
-        healthbar = true,
-        health = true,
-        color = CHAMS_COLOR,
-        previewHealth = 100,
-        previewDistance = "1133m",
-    }
-
-    local function applyColor(c)
-        for _, part in pairs(chamsParts) do
-            part.BackgroundColor3 = c
-        end
-        for _, line in ipairs(skeletonLines) do
-            line.BackgroundColor3 = c
-        end
-        boxStroke.Color = Color3.fromRGB(
-            math.floor(c.R * 255 * 0.85),
-            math.floor(c.G * 255 * 0.85),
-            math.floor(c.B * 255 * 0.85)
-        )
-        healthBarFill.BackgroundColor3 = c
-    end
-
-    local function updateHealthBar()
-        local ratio = math.clamp(state.previewHealth / 100, 0, 1)
-        healthBarBg.Size = UDim2.new(0, HEALTH_BAR_WIDTH, 1, 0)
-        healthBarBg.Position = UDim2.fromScale(0, 0)
-        healthBarFill.Size = UDim2.fromScale(1, ratio)
-    end
-
-    -- Re-sincroniza overlays dependentes de tamanho quando o holder muda de tamanho
-    -- (esqueleto em pixels e barra de vida), cobrindo o caso de layout inicial.
-    holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-        for i, pair in ipairs(jointPairs) do
-            local line = skeletonLines[i]
-            if line then
-                local dist, angle = lineSpec(pair[1], pair[2])
-                line.Size = UDim2.fromOffset(dist, SKELETON_THICKNESS)
-                line.Rotation = angle
-            end
-        end
-        if state.healthbar then updateHealthBar() end
-    end)
-
-    local controller = {}
-
-    function controller.SetChams(enabled)
-        state.chams = enabled
-        for _, part in pairs(chamsParts) do
-            part.Visible = enabled
-        end
-    end
-
-    function controller.SetBox(enabled)
-        state.box = enabled
-        boundingBox.Visible = enabled
-    end
-
-    function controller.SetSkeleton(enabled)
-        state.skeleton = enabled
-        for _, line in ipairs(skeletonLines) do
-            line.Visible = enabled
-        end
-    end
-
-    function controller.SetName(enabled)
-        state.name = enabled
-        nameLabel.Visible = enabled
-    end
-
-    function controller.SetDistance(enabled)
-        state.distance = enabled
-        distanceLabel.Visible = enabled
-    end
-
-    function controller.SetHealthBar(enabled)
-        state.healthbar = enabled
-        healthBarBg.Visible = enabled
-        if enabled then updateHealthBar() end
-    end
-
-    function controller.SetHealth(enabled)
-        state.health = enabled
-    end
-
-    function controller.SetColor(c)
-        state.color = c
-        applyColor(c)
-    end
-
-    function controller.SetPreviewHealth(hp)
-        state.previewHealth = math.clamp(hp, 0, 100)
-        if state.healthbar then updateHealthBar() end
-    end
-
-    function controller.SetPreviewDistance(dist)
-        state.previewDistance = dist
-        distanceLabel.Text = dist
-    end
-
-    -- Draggable repositioning for preview elements
-    local dragElements = {
-        nameLabel = nameLabel,
-        distanceLabel = distanceLabel,
-        healthBarBg = healthBarBg,
-        boundingBox = boundingBox,
-    }
-    local dragOffsets = {}
-
-    local function makeDraggable(element, elementName)
-        local dragging = false
-        local dragStart = nil
-        local startPos = nil
-
-        local function updatePosition(input)
-            local delta = input.Position - dragStart
-            local newPos = UDim2.new(
-                startPos.X.Scale,
-                startPos.X.Offset + delta.X,
-                startPos.Y.Scale,
-                startPos.Y.Offset + delta.Y
-            )
-            element.Position = newPos
-            dragOffsets[elementName] = { X = newPos.X.Offset, Y = newPos.Y.Offset }
-        end
-
-        element.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                dragging = true
-                dragStart = input.Position
-                startPos = element.Position
-                element.ZIndex = 10
-            end
-        end)
-
-        element.InputChanged:Connect(function(input)
-            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                updatePosition(input)
-            end
-        end)
-
-        UserInputService.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                if dragging then
-                    dragging = false
-                    element.ZIndex = elementName == "boundingBox" and 3 or elementName == "healthBarBg" and 3 or 5
-                end
-            end
-        end)
-    end
-
-    for name, elem in pairs(dragElements) do
-        makeDraggable(elem, name)
-    end
-
-    function controller.GetDragOffsets()
-        return dragOffsets
-    end
-
-    function controller.SetDragOffsets(offsets)
-        dragOffsets = offsets or {}
-        for name, offset in pairs(dragOffsets) do
-            local elem = dragElements[name]
-            if elem and offset then
-                elem.Position = UDim2.new(elem.Position.X.Scale, offset.X, elem.Position.Y.Scale, offset.Y)
-            end
-        end
-    end
-
-    -- Initialize
-    controller.SetChams(state.chams)
-    controller.SetBox(state.box)
-    controller.SetSkeleton(state.skeleton)
-    controller.SetName(state.name)
-    controller.SetDistance(state.distance)
-    controller.SetHealthBar(state.healthbar)
-    controller.SetHealth(state.health)
-    controller.SetPreviewHealth(state.previewHealth)
-    controller.SetPreviewDistance(state.previewDistance)
-
-    return controller
+local FEATURE_BY_KEY = {}
+for _, definition in ipairs(FEATURE_DEFINITIONS) do
+    FEATURE_BY_KEY[definition.key] = definition
 end
 
--- ============================================================
---  Build ESP Panel with Preview + Settings (Modal Layout)
--- ============================================================
+local function featureEnabled(settings, key)
+    local feature = settings and settings[key]
+    return type(feature) == "table" and feature.on == true
+end
+
+local function setOption(kind, path, value)
+    return ESPConfig.set(kind, path, value)
+end
+
+local function buildGeneralDrawer(container, kind, settings, controls)
+    controls["maxDist"] = container:Slider({
+        Name = "Distância máx.",
+        Min = 100,
+        Max = 5000,
+        Default = settings.maxDist,
+        Suffix = "m",
+        Step = 50,
+        Callback = function(value)
+            setOption(kind, "maxDist", value)
+        end,
+    })
+    controls["textSize"] = container:Slider({
+        Name = "Tamanho do texto",
+        Min = 8,
+        Max = 20,
+        Default = settings.textSize,
+        Step = 1,
+        Tooltip = "Escala o nome, a vida e a distância no ESP e na prévia.",
+        Callback = function(value)
+            setOption(kind, "textSize", value)
+        end,
+    })
+    controls["prevDist"] = container:Slider({
+        Name = "Distância da prévia",
+        Min = 10,
+        Max = 5000,
+        Default = settings.prevDist,
+        Suffix = "m",
+        Step = 1,
+        Callback = function(value)
+            setOption(kind, "prevDist", value)
+        end,
+    })
+    controls["prevHp"] = container:Slider({
+        Name = "Vida da prévia",
+        Min = 0,
+        Max = 100,
+        Default = settings.prevHp,
+        Step = 1,
+        Callback = function(value)
+            setOption(kind, "prevHp", value)
+        end,
+    })
+    controls["lod.on"] = container:Toggle({
+        Name = "Detalhes só de perto",
+        Default = settings.lod.on,
+        Tooltip = "Longe, mostra só um ponto e a distância. Perto, mostra todos os detalhes.",
+        Callback = function(value)
+            setOption(kind, "lod.on", value)
+        end,
+    })
+    controls["lod.near"] = container:Slider({
+        Name = "Detalhes até",
+        Min = 20,
+        Max = 1000,
+        Default = settings.lod.near,
+        Suffix = "m",
+        Step = 10,
+        Callback = function(value)
+            setOption(kind, "lod.near", value)
+        end,
+    })
+    controls["ignoreDead"] = container:Toggle({
+        Name = "Ignorar jogadores mortos",
+        Default = settings.ignoreDead,
+        Callback = function(value)
+            setOption(kind, "ignoreDead", value)
+        end,
+    })
+    controls["teamCheck"] = container:Toggle({
+        Name = "Ignorar equipe",
+        Default = settings.teamCheck,
+        Callback = function(value)
+            setOption(kind, "teamCheck", value)
+        end,
+    })
+    controls["nearest.on"] = container:Toggle({
+        Name = "Destacar mais próximo",
+        Default = settings.nearest.on,
+        Callback = function(value)
+            setOption(kind, "nearest.on", value)
+        end,
+    })
+    controls["nearest.color"] = container:ColorPicker({
+        Name = "Cor do mais próximo",
+        Default = settings.nearest.color,
+        Callback = function(color)
+            setOption(kind, "nearest.color", color)
+        end,
+    })
+    controls["primaryColor"] = container:ColorPicker({
+        Name = "Cor principal",
+        Default = settings.primaryColor,
+        Callback = function(color)
+            ESPConfig.applyPrimaryColor(kind, color)
+        end,
+    })
+end
+
+local function buildFeatureDrawer(container, kind, key, settings, controls)
+    local feature = settings[key]
+    if type(feature) ~= "table" then
+        return
+    end
+
+    if feature.color then
+        controls[key .. ".color"] = container:ColorPicker({
+            Name = "Cor",
+            Default = feature.color,
+            Callback = function(color)
+                setOption(kind, key .. ".color", color)
+            end,
+        })
+    end
+
+    if key == "highlight" then
+        controls["highlight.fillTransparency"] = container:Slider({
+            Name = "Transparência do preenchimento",
+            Min = 0,
+            Max = 100,
+            Default = feature.fillTransparency * 100,
+            Suffix = "%",
+            Step = 1,
+            Callback = function(value)
+                setOption(kind, "highlight.fillTransparency", value / 100)
+            end,
+        })
+        controls["highlight.outlineTransparency"] = container:Slider({
+            Name = "Transparência do contorno",
+            Min = 0,
+            Max = 100,
+            Default = feature.outlineTransparency * 100,
+            Suffix = "%",
+            Step = 1,
+            Callback = function(value)
+                setOption(kind, "highlight.outlineTransparency", value / 100)
+            end,
+        })
+        controls["highlight.outlineColor"] = container:ColorPicker({
+            Name = "Cor do contorno",
+            Default = feature.outlineColor,
+            Callback = function(color)
+                setOption(kind, "highlight.outlineColor", color)
+            end,
+        })
+    elseif key == "box" then
+        controls["box.style"] = container:Dropdown({
+            Name = "Estilo",
+            Options = { "Cantos", "Completa" },
+            Default = feature.style,
+            Callback = function(value)
+                setOption(kind, "box.style", value)
+            end,
+        })
+        controls["box.thick"] = container:Slider({
+            Name = "Espessura",
+            Min = 1,
+            Max = 4,
+            Default = feature.thick,
+            Step = 0.5,
+            Callback = function(value)
+                setOption(kind, "box.thick", value)
+            end,
+        })
+        controls["box.alpha"] = container:Slider({
+            Name = "Opacidade",
+            Min = 10,
+            Max = 100,
+            Default = feature.alpha * 100,
+            Suffix = "%",
+            Step = 1,
+            Callback = function(value)
+                setOption(kind, "box.alpha", value / 100)
+            end,
+        })
+        controls["box.corner"] = container:Slider({
+            Name = "Tamanho do canto",
+            Min = 4,
+            Max = 30,
+            Default = feature.corner,
+            Step = 1,
+            Callback = function(value)
+                setOption(kind, "box.corner", value)
+            end,
+        })
+    elseif key == "name" then
+        controls["name.size"] = container:Slider({
+            Name = "Tamanho",
+            Min = 8,
+            Max = 20,
+            Default = feature.size,
+            Step = 1,
+            Callback = function(value)
+                setOption(kind, "name.size", value)
+            end,
+        })
+        controls["name.outline"] = container:Toggle({
+            Name = "Contorno do texto",
+            Default = feature.outline,
+            Callback = function(value)
+                setOption(kind, "name.outline", value)
+            end,
+        })
+    elseif key == "healthbar" then
+        controls["healthbar.auto"] = container:Toggle({
+            Name = "Cor automática",
+            Default = feature.auto,
+            Callback = function(value)
+                setOption(kind, "healthbar.auto", value)
+            end,
+        })
+        controls["healthbar.side"] = container:Dropdown({
+            Name = "Posição",
+            Options = { "Esquerda", "Direita" },
+            Default = feature.side,
+            Callback = function(value)
+                setOption(kind, "healthbar.side", value)
+            end,
+        })
+        controls["healthbar.width"] = container:Slider({
+            Name = "Largura da barra",
+            Min = 2,
+            Max = 10,
+            Default = feature.width,
+            Step = 1,
+            Callback = function(value)
+                setOption(kind, "healthbar.width", value)
+            end,
+        })
+    elseif key == "health" then
+        controls["health.size"] = container:Slider({
+            Name = "Tamanho",
+            Min = 8,
+            Max = 20,
+            Default = feature.size,
+            Step = 1,
+            Callback = function(value)
+                setOption(kind, "health.size", value)
+            end,
+        })
+    elseif key == "distance" then
+        controls["distance.unit"] = container:Dropdown({
+            Name = "Unidade",
+            Options = { "m", "studs" },
+            Default = feature.unit,
+            Callback = function(value)
+                setOption(kind, "distance.unit", value)
+            end,
+        })
+        controls["distance.size"] = container:Slider({
+            Name = "Tamanho",
+            Min = 8,
+            Max = 20,
+            Default = feature.size,
+            Step = 1,
+            Callback = function(value)
+                setOption(kind, "distance.size", value)
+            end,
+        })
+        controls["distance.outline"] = container:Toggle({
+            Name = "Contorno do texto",
+            Default = feature.outline,
+            Callback = function(value)
+                setOption(kind, "distance.outline", value)
+            end,
+        })
+    elseif key == "tracers" then
+        controls["tracers.origin"] = container:Dropdown({
+            Name = "Origem",
+            Options = { "Baixo", "Centro", "Cima" },
+            Default = feature.origin,
+            Callback = function(value)
+                setOption(kind, "tracers.origin", value)
+            end,
+        })
+        controls["tracers.thick"] = container:Slider({
+            Name = "Espessura",
+            Min = 1,
+            Max = 4,
+            Default = feature.thick,
+            Step = 0.5,
+            Callback = function(value)
+                setOption(kind, "tracers.thick", value)
+            end,
+        })
+    elseif key == "skeleton" then
+        controls["skeleton.thick"] = container:Slider({
+            Name = "Espessura",
+            Min = 1,
+            Max = 4,
+            Default = feature.thick,
+            Step = 0.5,
+            Callback = function(value)
+                setOption(kind, "skeleton.thick", value)
+            end,
+        })
+    end
+end
+
 local function buildEspPanel(kind)
     return function(m)
-        local Library = BBC.Library
-        local S = Library.ESP and Library.ESP[kind]
-        if not S then return end
+        if not ESPConfig then
+            return
+        end
+        ESPConfig.ensureDefaults(Library)
 
-        local L = m.Left
-        local R = m.Right
+        local settings = Library.ESP and Library.ESP[kind]
+        if type(settings) ~= "table" then
+            return
+        end
+        local function currentSettings()
+            local current = Library.ESP and Library.ESP[kind]
+            return type(current) == "table" and current or settings
+        end
+
+        local settingControls = {}
+        local left = m.Left
+        local rightPanel = m.Right
 
         -- ============================================================
         --  LEFT SIDE: PRÉVIA
         -- ============================================================
-        -- Header is now created by Window:_getModal with headerExtras (3 action icons: layout-grid, lock, star)
-
-        -- Central Preview Frame (dark background with soft glow)
         local previewFrame = create("Frame", {
             Name = "PreviewFrame",
             AnchorPoint = Vector2.new(0.5, 0.5),
@@ -5512,12 +7641,11 @@ local function buildEspPanel(kind)
             BackgroundColor3 = Color3.fromRGB(15, 15, 20),
             BorderSizePixel = 0,
             ClipsDescendants = true,
-        }, L)
+        }, left)
         corner(previewFrame, 8)
         local previewStroke = stroke(previewFrame, "Accent", 0.2, 1)
         previewStroke.Color = Color3.fromRGB(255, 130, 0)
 
-        -- Soft center glow (gradient)
         local glow = create("Frame", {
             Name = "Glow",
             AnchorPoint = Vector2.new(0.5, 0.5),
@@ -5526,7 +7654,7 @@ local function buildEspPanel(kind)
             BackgroundTransparency = 1,
             ZIndex = -1,
         }, previewFrame)
-        local glowGrad = create("UIGradient", {
+        create("UIGradient", {
             Color = ColorSequence.new({
                 ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 130, 0)),
                 ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 130, 0)),
@@ -5540,7 +7668,6 @@ local function buildEspPanel(kind)
             Rotation = 45,
         }, glow)
 
-        -- Preview Container inside the frame
         local previewContainer = create("Frame", {
             Name = "ESPPreviewContainer",
             AnchorPoint = Vector2.new(0.5, 0.5),
@@ -5549,16 +7676,11 @@ local function buildEspPanel(kind)
             BackgroundTransparency = 1,
         }, previewFrame)
 
-        -- Build the character preview inside the container
-        local previewController = SetupCharacterPreview(previewContainer)
-
-        -- Store controller for external access
+        local previewController = ESPPreview.build(previewContainer, settings)
         Library.ESPPreviewControllers = Library.ESPPreviewControllers or {}
         Library.ESPPreviewControllers[kind] = previewController
 
-        -- Quick-Toggle Button Grid at Preview Bottom (2 rows x 4 cols)
-        -- 64px = 2 linhas de 30 + 1 gap de 4; fica 3px acima do container
-        -- (~8px de respiro até a borda laranja) e abaixo do rótulo de distância.
+        -- Grade 2x4 de quick-toggles (8 botões: 4 por linha).
         local toggleButtonsFrame = create("Frame", {
             Name = "QuickTogglesGrid",
             BackgroundTransparency = 1,
@@ -5566,7 +7688,7 @@ local function buildEspPanel(kind)
             Position = UDim2.new(0.5, 0, 1, -3),
             Size = UDim2.new(1, 0, 0, 64),
         }, previewContainer)
-        local gridLayout = create("UIGridLayout", {
+        create("UIGridLayout", {
             CellSize = UDim2.fromOffset(44, 30),
             CellPadding = UDim2.fromOffset(4, 4),
             FillDirection = Enum.FillDirection.Horizontal,
@@ -5577,29 +7699,15 @@ local function buildEspPanel(kind)
             FillDirectionMaxCells = 4,
         }, toggleButtonsFrame)
 
-        local quickToggles = {
-            { key = "highlight", label = "Destaque", setter = function(v) previewController.SetChams(v) end },
-            { key = "box", label = "Caixa", setter = function(v) previewController.SetBox(v) end },
-            { key = "name", label = "Nome", setter = function(v) previewController.SetName(v) end },
-            { key = "healthbar", label = "Barra vida", setter = function(v) previewController.SetHealthBar(v) end },
-            { key = "health", label = "Vida", setter = function(v) previewController.SetHealth(v) end },
-            { key = "distance", label = "Distância", setter = function(v) previewController.SetDistance(v) end },
-            -- "Linhas" (tracers): a prévia NÃO desenha tracer (overlay preso ao personagem),
-            -- então o botão só aciona a flag S.tracers.on do ESP no jogo — o handler abaixo
-            -- já escreve essa flag e o próprio botão reflete o estado (Accent quando ligado).
-            { key = "tracers", label = "Linhas" },
-            { key = "skeleton", label = "Esqueleto", setter = function(v) previewController.SetSkeleton(v) end },
-        }
-
-        for i, tgl in ipairs(quickToggles) do
-            local isEnabled = S[tgl.key] and S[tgl.key].on or false
-            local btn = create("TextButton", {
-                Name = "Toggle_" .. tgl.key,
-                BackgroundColor3 = isEnabled and Library.Theme.Accent or Library.Theme.Surface2,
+        local quickButtons = {}
+        for index, definition in ipairs(FEATURE_DEFINITIONS) do
+            local key = definition.key
+            local button = create("TextButton", {
+                Name = "Toggle_" .. key,
+                BackgroundTransparency = 0,
                 BorderSizePixel = 0,
                 Size = UDim2.fromOffset(44, 30),
-                Text = tgl.label,
-                TextColor3 = isEnabled and Color3.new(1,1,1) or Library.Theme.Text,
+                Text = definition.label,
                 TextSize = 9,
                 FontFace = Library.Fonts.Medium,
                 TextXAlignment = Enum.TextXAlignment.Center,
@@ -5608,129 +7716,105 @@ local function buildEspPanel(kind)
                 TextScaled = true,
                 TextTruncate = Enum.TextTruncate.None,
                 ClipsDescendants = false,
-                LayoutOrder = i,
+                LayoutOrder = index,
                 AutoButtonColor = false,
             }, toggleButtonsFrame)
-            corner(btn, 4)
-            local btnStroke = stroke(btn, "Stroke", 0, 1)
-            btnStroke.Color = isEnabled and Library.Theme.Accent or Library.Theme.Stroke
-
-            -- Ensure text doesn't overflow
-            local textConstraint = create("UITextSizeConstraint", {
+            corner(button, 4)
+            local buttonStroke = stroke(button, "Stroke", 0, 1)
+            create("UITextSizeConstraint", {
                 MinTextSize = 7,
                 MaxTextSize = 10,
-            }, btn)
+            }, button)
 
-            btn.MouseButton1Click:Connect(function()
-                isEnabled = not isEnabled
-                if S[tgl.key] then S[tgl.key].on = isEnabled end
-                if tgl.setter then tgl.setter(isEnabled) end
-                btn.BackgroundColor3 = isEnabled and Library.Theme.Accent or Library.Theme.Surface2
-                btn.TextColor3 = isEnabled and Color3.new(1,1,1) or Library.Theme.Text
-                btnStroke.Color = isEnabled and Library.Theme.Accent or Library.Theme.Stroke
+            local function isOn()
+                return featureEnabled(currentSettings(), key)
+            end
+            bind(button, "BackgroundColor3", function()
+                return isOn() and Library.Theme.Accent or Library.Theme.Surface2
+            end)
+            bind(button, "TextColor3", function()
+                return isOn() and Library.Theme.Text or Library.Theme.Muted
+            end)
+            bind(buttonStroke, "Color", function()
+                return isOn() and Library.Theme.Accent or Library.Theme.Stroke
             end)
 
-            -- Bind theme colors
-            bind(btn, "BackgroundColor3", isEnabled and "Accent" or "Surface2")
-            bind(btn, "TextColor3", isEnabled and "Text" or "Text")
-            bind(btnStroke, "Color", isEnabled and "Accent" or "Stroke")
+            button.MouseButton1Click:Connect(function()
+                setOption(kind, key .. ".on", not isOn())
+            end)
+            quickButtons[key] = button
         end
 
         -- ============================================================
-        --  RIGHT SIDE: AJUSTES DO JOGADOR
+        --  RIGHT SIDE: AJUSTES DO JOGADOR / NPC
         -- ============================================================
-        -- Header is now created by Window:_getModal with headerExtras (gear icon + X close)
-
-        -- Scrolling content area (modal header is 28px + 4px separator = 32px, scroll starts at 32)
-        local rightScroll = create("ScrollingFrame", {
-            Name = "SettingsScroll",
-            BackgroundTransparency = 1,
-            BorderSizePixel = 0,
-            Position = UDim2.fromOffset(0, 32),
-            Size = UDim2.new(1, 0, 1, -32 - 50), -- Leave space for footer
-            ScrollBarThickness = 2,
-            CanvasSize = UDim2.new(),
-            AutomaticCanvasSize = Enum.AutomaticSize.Y,
-            ScrollingDirection = Enum.ScrollingDirection.Y,
-            ClipsDescendants = true,
-        }, m.RightBox)
-        bind(rightScroll, "ScrollBarImageColor3", "Accent")
-        local rsLayout = listLayout(rightScroll, 4)
-        rsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-        pad(rightScroll, 8, 8, 4, 4)
-
-        local rightPanel = setmetatable({ List = rightScroll, _order = 0, Window = m.Right.Window, _path = m.Right._path .. "/settings" }, BBC.UI.Container)
-
-        -- General settings foldout
-        local fold = rightPanel:Foldout({ Name = "Configurações gerais", Build = function(p)
-            p:Slider({ Name = "Distância máx.", Min = 100, Max = 3000, Default = 1000, Suffix = "m", Step = 50, Callback = function(v) S.maxDist = v end })
-            p:Slider({ Name = "Tamanho do texto", Min = 9, Max = 16, Default = 10, Callback = function(v) S.textSize = v end })
-            p:Slider({ Name = "Distância da prévia", Min = 10, Max = 2000, Default = 1133, Suffix = "m", Step = 1, Callback = function(v) S.prevDist = v; previewController.SetPreviewDistance(v .. "m") end })
-            p:Slider({ Name = "Vida da prévia", Min = 0, Max = 100, Default = 100, Callback = function(v) S.prevHp = v; previewController.SetPreviewHealth(v) end })
-            p:Toggle({ Name = "Só detalhes de perto", Default = true, Tooltip = "Longe, mostra só um ponto e a distância. Perto, mostra tudo.", Callback = function(v) S.lod.on = v end })
-            p:Slider({ Name = "Detalhes até", Min = 20, Max = 1000, Default = 150, Suffix = "m", Step = 10, Callback = function(v) S.lod.near = v end })
-            p:Toggle({ Name = "Destacar mais próximo", Default = false, Tooltip = "O alvo mais perto de você ganha outra cor e uma seta em cima.",
-                Callback = function(v) S.nearest.on = v end,
-                Settings = function(q) q:ColorPicker({ Name = "Cor", Default = S.nearest.color, Callback = function(c) S.nearest.color = c end }) end })
-        end })
-
-        -- Vertical toggle list with gear icons
-        local function addToggle(key, labelText, extraSettings)
-            local isEnabled = S[key] and S[key].on or false
-            local toggle = rightPanel:Toggle({ Name = labelText, Default = isEnabled, Callback = function(v)
-                if S[key] then S[key].on = v end
-                -- Sync with preview controller
-                if key == "highlight" then previewController.SetChams(v)
-                elseif key == "box" then previewController.SetBox(v)
-                elseif key == "skeleton" then previewController.SetSkeleton(v)
-                elseif key == "name" then previewController.SetName(v)
-                elseif key == "distance" then previewController.SetDistance(v)
-                elseif key == "healthbar" then previewController.SetHealthBar(v)
-                elseif key == "health" then previewController.SetHealth(v)
-                end
+        local generalDrawer = rightPanel:Drawer({
+            Name = "Configurações gerais",
+            Tooltip = "Ajustes gerais do ESP.",
+            Parent = m.Overlay,
+            Path = kind .. "/general",
+            Width = 380,
+            Height = 300,
+            Build = function(container)
+                buildGeneralDrawer(container, kind, settings, settingControls)
             end,
-            Settings = function(p)
-                if S[key] then
-                    p:ColorPicker({ Name = "Cor", Default = S[key].color, Callback = function(c)
-                        if S[key] then S[key].color = c end
-                        if key == "highlight" or key == "box" or key == "skeleton" then
-                            previewController.SetColor(c)
-                        end
-                    end })
-                end
-                if extraSettings then extraSettings(p) end
-            end })
+        })
+        m.GeneralDrawer = generalDrawer
+
+        local featureToggles = {}
+        for _, definition in ipairs(FEATURE_DEFINITIONS) do
+            local key = definition.key
+            local toggle = rightPanel:Toggle({
+                Name = definition.label,
+                Default = featureEnabled(settings, key),
+                Callback = function(value)
+                    setOption(kind, key .. ".on", value)
+                end,
+                Drawer = function(container)
+                    buildFeatureDrawer(container, kind, key, settings, settingControls)
+                end,
+                DrawerParent = m.Overlay,
+                DrawerPath = kind .. "/feature/" .. key,
+            })
+            featureToggles[key] = toggle
         end
 
-        addToggle("highlight", "Destaque", function(p)
-            p:Slider({ Name = "Preenchimento", Min = 5, Max = 90, Default = 60, Suffix = "%", Callback = function(v) if S.highlight then S.highlight.alpha = v / 100 end end })
-            p:Slider({ Name = "Contorno", Min = 0, Max = 4, Default = 2, Step = 0.5, Callback = function(v) if S.highlight then S.highlight.outline = v end end })
-        end)
-        addToggle("box", "Caixa", function(p)
-            p:Dropdown({ Name = "Estilo", Options = { "Cantos", "Completa" }, Default = "Completa", Callback = function(v) if S.box then S.box.style = v end end })
-            p:Slider({ Name = "Espessura", Min = 1, Max = 5, Default = 1, Callback = function(v) if S.box then S.box.thick = v end end })
-            p:Slider({ Name = "Opacidade", Min = 10, Max = 100, Default = 50, Suffix = "%", Callback = function(v) if S.box then S.box.alpha = v / 100 end end })
-            p:Slider({ Name = "Tamanho do canto", Min = 6, Max = 30, Default = 14, Callback = function(v) if S.box then S.box.corner = v end end })
-        end)
-        addToggle("name", "Nome")
-        addToggle("healthbar", "Barra de vida", function(p)
-            p:Toggle({ Name = "Cor automática", Default = true, Callback = function(v) if S.healthbar then S.healthbar.auto = v end end })
-            p:Dropdown({ Name = "Posição", Options = { "Esquerda", "Direita" }, Default = "Esquerda", Callback = function(v) if S.healthbar then S.healthbar.side = v end end })
-            p:Slider({ Name = "Largura da barra", Min = 2, Max = 10, Default = 2, Callback = function(v) if S.healthbar then S.healthbar.width = v end end })
-        end)
-        addToggle("health", "Vida")
-        addToggle("distance", "Distância", function(p)
-            p:Dropdown({ Name = "Unidade", Options = { "m", "studs" }, Default = "m", Callback = function(v) if S.distance then S.distance.unit = v end end })
-        end)
-        addToggle("tracers", "Linhas até alvos", function(p)
-            p:Dropdown({ Name = "Origem", Options = { "Baixo", "Cima" }, Default = "Baixo", Callback = function(v) if S.tracers then S.tracers.origin = v end end })
-            p:Slider({ Name = "Espessura", Min = 1, Max = 4, Default = 1, Callback = function(v) if S.tracers then S.tracers.thick = v end end })
-        end)
-        addToggle("skeleton", "Esqueleto", function(p)
-            p:Slider({ Name = "Espessura", Min = 1, Max = 4, Default = 1.5, Step = 0.5, Callback = function(v) if S.skeleton then S.skeleton.thick = v end end })
-        end)
+        -- The canonical config is shared by the engine, preview and both UI
+        -- surfaces. A change event keeps every representation synchronized.
+        local unsubscribe = ESPConfig.onChange(function(changedKind, path, value)
+            if changedKind ~= kind then
+                return
+            end
+            previewController.ApplySettings(currentSettings())
 
-        -- Fixed footer with touch hints
+            local settingControl = settingControls[path]
+            if settingControl and type(settingControl.Set) == "function" then
+                settingControl:Set(value, true)
+            end
+
+            local featureKey = string.match(path, "^([^%.]+)")
+            local definition = featureKey and FEATURE_BY_KEY[featureKey]
+            if definition and path == featureKey .. ".on" then
+                local toggle = featureToggles[definition.key]
+                if toggle then
+                    toggle:Set(value == true, true)
+                end
+            end
+        end)
+        m.Overlay.Destroying:Connect(unsubscribe)
+
+        m.PreviewGrid = toggleButtonsFrame
+        m.TogglePreviewGrid = function()
+            toggleButtonsFrame.Visible = not toggleButtonsFrame.Visible
+        end
+        m.TogglePreviewLock = function()
+            previewController.SetLocked(not previewController.IsLocked())
+        end
+        m.ResetPreview = function()
+            previewController.ResetLayout()
+        end
+
+        -- Fixed footer with touch hints.
         local footer = create("Frame", {
             Name = "SettingsFooter",
             BackgroundTransparency = 1,
@@ -5742,9 +7826,18 @@ local function buildEspPanel(kind)
         footerLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
         footerLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
 
-        local hint1 = label(footer, "Toque: ativar", 10, "Muted", false, { Size = UDim2.fromOffset(100, 14), TextXAlignment = Enum.TextXAlignment.Right })
-        local hint2 = label(footer, "Arraste: mover", 10, "Muted", false, { Size = UDim2.fromOffset(100, 14), TextXAlignment = Enum.TextXAlignment.Right })
-        local hint3 = label(footer, "Segure: ajustes", 10, "Muted", false, { Size = UDim2.fromOffset(100, 14), TextXAlignment = Enum.TextXAlignment.Right })
+        label(footer, "Toque: ativar", 10, "Muted", false, {
+            Size = UDim2.fromOffset(100, 14),
+            TextXAlignment = Enum.TextXAlignment.Right,
+        })
+        label(footer, "Arraste: mover", 10, "Muted", false, {
+            Size = UDim2.fromOffset(100, 14),
+            TextXAlignment = Enum.TextXAlignment.Right,
+        })
+        label(footer, "Segure: ajustes", 10, "Muted", false, {
+            Size = UDim2.fromOffset(100, 14),
+            TextXAlignment = Enum.TextXAlignment.Right,
+        })
     end
 end
 
@@ -5757,8 +7850,10 @@ function Features.buildVisuals(window)
     local visuals = window:Tab({ Name = "VISUAIS", Icon = "eye" })
 
     local group = visuals:Groupbox({ Name = "ESP", Icon = "scan-eye", Side = "Left" })
-    for _, name in ipairs({ "Jogador", "NPCs", "Corpo", "Recipiente", "Item no chão", "Itens de missão" }) do
-        T(group, name, name == "Jogador" or name == "NPCs" or name == "Corpo")
+    -- Only character ESP kinds currently have reliable adapters. Unsupported
+    -- world-object rows stay hidden instead of exposing dead controls.
+    for _, name in ipairs({ "Jogador", "NPCs" }) do
+        T(group, name, true)
     end
 
     group = visuals:Groupbox({ Name = "INTERFACE DO JOGO", Icon = "layout-dashboard", Side = "Right" })
@@ -7208,9 +9303,8 @@ local Window = Library:Window({
 local IS_MOBILE = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 pcall(function() Window:SetToggleButton(true) end)
 
--- Initialize Protection layer after Library is fully available
+-- Initialize Protection layer after Library is fully available.
 Protection.init({})
--- ESP features registered and engine started inside Protection.init()
 
 -- Tradução automática
 do
@@ -7226,9 +9320,57 @@ do
     end
 end
 
--- Register ESP preview modals BEFORE building visuals tab (so Controls.T can find them)
-BBC.MODALS["Jogador"] = { build = BBC.Features.buildEspPanel("Jogador"), titles = { Left = "PRÉVIA", Right = "Ajustes gerais" }, headerExtras = { leftActions = { { icon = "layout-grid", callback = function() end }, { icon = "lock", callback = function() end }, { icon = "star", callback = function() end } }, rightActions = { { icon = "sliders-horizontal", callback = function() end }, { icon = "x", callback = function(m) m.Overlay.Visible = false end } } } }
-BBC.MODALS["NPCs"] = { build = BBC.Features.buildEspPanel("NPCs"), titles = { Left = "PRÉVIA", Right = "Ajustes do NPC" }, headerExtras = { leftActions = { { icon = "layout-grid", callback = function() end }, { icon = "lock", callback = function() end }, { icon = "star", callback = function() end } }, rightActions = { { icon = "sliders-horizontal", callback = function() end }, { icon = "x", callback = function(m) m.Overlay.Visible = false end } } } }
+-- Register ESP preview modals BEFORE building visuals tab (so Controls.T can find them).
+local function espHeaderExtras()
+    return {
+        leftActions = {
+            {
+                icon = "layout-grid",
+                callback = function(m)
+                    if m.TogglePreviewGrid then
+                        m.TogglePreviewGrid()
+                    end
+                end,
+            },
+            {
+                icon = "lock",
+                callback = function(m)
+                    if m.TogglePreviewLock then
+                        m.TogglePreviewLock()
+                    end
+                end,
+            },
+            {
+                icon = "star",
+                callback = function(m)
+                    if m.ResetPreview then
+                        m.ResetPreview()
+                    end
+                end,
+            },
+        },
+        rightActions = {
+            { icon = "sliders-horizontal", callback = function(m)
+                if m.GeneralDrawer and m.GeneralDrawer.Open then m.GeneralDrawer.Open() end
+            end },
+            { icon = "x", callback = function(m) m.Overlay.Visible = false end },
+        },
+    }
+end
+
+BBC.MODALS["Jogador"] = {
+    build = BBC.Features.buildEspPanel("Jogador"),
+    titles = { Left = "PRÉVIA", Right = "AJUSTES DO JOGADOR" },
+    headerExtras = espHeaderExtras(),
+}
+BBC.MODALS["NPCs"] = {
+    build = BBC.Features.buildEspPanel("NPCs"),
+    titles = { Left = "PRÉVIA", Right = "AJUSTES DOS NPCS" },
+    headerExtras = espHeaderExtras(),
+}
+
+-- Register the canonical ESP controller before the visuals rows are built.
+Protection.registerESPFeatures()
 
 -- ---------- Features ----------
 BBC.Features.buildVisuals(Window)

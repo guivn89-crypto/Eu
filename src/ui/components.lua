@@ -5,8 +5,6 @@
     PlayerPreview, etc.) e helpers de layout compartilhados por abas/grupos.
 ]]
 
---!strict
-
 -- Type definitions for UI components
 export type ToggleOptions = {
     Name: string,
@@ -14,6 +12,9 @@ export type ToggleOptions = {
     Tooltip: string?,
     Callback: (boolean) -> (),
     Settings: (() -> ())?,
+    Drawer: ((any) -> ())?,
+    DrawerParent: any?,
+    DrawerPath: string?,
     SettingsIcon: string?,
     Modal: (() -> ())?,
     ModalTitles: { string }?,
@@ -87,6 +88,16 @@ export type FoldoutOptions = {
     DefaultOpen: boolean?,
 }
 
+export type DrawerOptions = {
+    Name: string,
+    Tooltip: string?,
+    Build: (any) -> (),
+    Parent: any?,
+    Path: string?,
+    Width: number?,
+    Height: number?,
+}
+
 export type ContainerObject = {
     _order: number,
     _path: string?,
@@ -101,6 +112,7 @@ export type ContainerObject = {
     Input: (self: ContainerObject, opts: InputOptions) -> any,
     ColorPicker: (self: ContainerObject, opts: ColorPickerOptions) -> any,
     Foldout: (self: ContainerObject, opts: FoldoutOptions) -> any,
+    Drawer: (self: ContainerObject, opts: DrawerOptions) -> any,
     Segmented: (self: ContainerObject, opts: { Name: string, Options: { string }, Default: string?, Callback: (string) -> (), Tooltip: string? }) -> any,
     Label: (self: ContainerObject, opts: { Name: string, Tooltip: string? }) -> any,
     Section: (self: ContainerObject, text: string) -> any,
@@ -188,14 +200,155 @@ local function newOuter(self, name)
 end
 
 -- ---------- subPanel helper (moved up for forward reference) ----------
-local function subPanel(self, parentOuter, order)
+local function subPanel(self, parentOuter, order, pathKey)
     local panel = create("Frame", { Size = UDim2.new(1, -16, 0, 0), Position = UDim2.fromOffset(8, 0), AutomaticSize = Enum.AutomaticSize.Y, BorderSizePixel = 0, Visible = false, LayoutOrder = order }, parentOuter)
     bind(panel, "BackgroundColor3", "Surface2")
     corner(panel, 4); stroke(panel, "Stroke", 0.3)
     local inner = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, panel)
     pad(inner, 0, 0, 3, 3); listLayout(inner, 0)
-    local sub = setmetatable({ List = inner, _order = 0, Window = self.Window, _path = (self._path or "") .. "/sub", Frame = panel }, Container)
+    local uniquePath = tostring(pathKey or "sub")
+    local sub = setmetatable({ List = inner, _order = 0, Window = self.Window, _path = (self._path or "") .. "/sub/" .. uniquePath, Frame = panel }, Container)
     return sub, panel
+end
+
+-- ---------- Drawer ----------
+local function buildDrawer(self, opts)
+    local win = self.Window
+    local parent = opts.Parent or (win and win._content)
+    if not parent then
+        return nil
+    end
+
+    local overlay = create("Frame", {
+        Name = "BBCHUDrawerOverlay",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 0.18,
+        BorderSizePixel = 0,
+        Visible = false,
+        ZIndex = 35,
+        Active = true,
+    }, parent)
+    bind(overlay, "BackgroundColor3", "Background")
+
+    local panel = create("Frame", {
+        Name = "BBCHUDrawer",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromScale(0.9, 0.78),
+        BackgroundTransparency = 0,
+        BorderSizePixel = 0,
+        ZIndex = 36,
+    }, overlay)
+    bind(panel, "BackgroundColor3", "Surface")
+    corner(panel, 6)
+    stroke(panel, "Accent", 0.15)
+
+    create("UISizeConstraint", {
+        MaxSize = Vector2.new(opts.Width or 380, opts.Height or 300),
+    }, panel)
+
+    local header = create("Frame", {
+        Name = "DrawerHeader",
+        Size = UDim2.new(1, 0, 0, 32),
+        BackgroundTransparency = 1,
+        ZIndex = 37,
+    }, panel)
+    label(header, opts.Name or "Ajustes", 13, "Text", true, {
+        Position = UDim2.fromOffset(12, 0),
+        Size = UDim2.new(1, -58, 1, 0),
+        TextYAlignment = Enum.TextYAlignment.Center,
+        ZIndex = 38,
+    })
+    local divider = create("Frame", {
+        Position = UDim2.fromOffset(8, 31),
+        Size = UDim2.new(1, -16, 0, 1),
+        BackgroundTransparency = 0.4,
+        BorderSizePixel = 0,
+        ZIndex = 37,
+    }, header)
+    bind(divider, "BackgroundColor3", "Stroke")
+
+    local close = create("TextButton", {
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -6, 0, -6),
+        Size = UDim2.fromOffset(44, 44),
+        BackgroundTransparency = 1,
+        Text = "",
+        AutoButtonColor = false,
+        ZIndex = 38,
+    }, header)
+    icon(close, "x", 16, "Text", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        ZIndex = 39,
+    })
+
+    local body = create("ScrollingFrame", {
+        Name = "DrawerContent",
+        Position = UDim2.fromOffset(0, 32),
+        Size = UDim2.new(1, 0, 1, -32),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ScrollBarThickness = 2,
+        CanvasSize = UDim2.new(),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollingDirection = Enum.ScrollingDirection.Y,
+        ZIndex = 37,
+    }, panel)
+    bind(body, "ScrollBarImageColor3", "Accent")
+    pad(body, 8, 8, 4, 4)
+    listLayout(body, 4)
+
+    local drawerPath = opts.Path or ((self._path or "") .. "/drawer/" .. tostring(opts.Name or "ajustes"))
+    local content = setmetatable({
+        List = body,
+        _order = 0,
+        Window = win,
+        _path = drawerPath,
+        Frame = panel,
+    }, Container)
+
+    local drawer = { Overlay = overlay, Panel = panel, Content = content }
+
+    function drawer.Open()
+        if win and win._activeDrawer and win._activeDrawer ~= drawer then
+            win._activeDrawer:Close()
+        end
+        overlay.Visible = true
+        if win then
+            win._activeDrawer = drawer
+        end
+    end
+
+    function drawer.Close()
+        overlay.Visible = false
+        if win and win._activeDrawer == drawer then
+            win._activeDrawer = nil
+        end
+    end
+
+    function drawer.IsOpen()
+        return overlay.Visible == true
+    end
+
+    function drawer.Destroy()
+        drawer.Close()
+        overlay:Destroy()
+    end
+
+    close.Activated:Connect(drawer.Close)
+    if type(parent.GetPropertyChangedSignal) == "function" then
+        parent:GetPropertyChangedSignal("Visible"):Connect(function()
+            if not parent.Visible then
+                drawer.Close()
+            end
+        end)
+    end
+
+    win._drawers = win._drawers or {}
+    table.insert(win._drawers, drawer)
+    safeCall(opts.Build, content)
+    return drawer
 end
 
 -- ---------- Toggle ----------
@@ -348,37 +501,61 @@ function Container:Toggle(opts)
         -- Declarado antes e atribuído depois (em vez de `local modalBtn = createGearButton(...)`)
         -- porque o callback referencia a própria variável; assim o analisador estático
         -- enxerga o uso e não reporta "unused local".
-        local modalBtn = nil
-        modalBtn = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
+        local modalIcon = nil
+        local _, returnedModalIcon = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
             local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras)
             if not hooked then
                 hooked = true
                 m.Overlay:GetPropertyChangedSignal("Visible"):Connect(function()
-                    if modalBtn and modalBtn.ImageColor3 then
-                        modalBtn.ImageColor3 = m.Overlay.Visible and Library.Theme.Accent or Library.Theme.Text
+                    if modalIcon and modalIcon.ImageColor3 then
+                        modalIcon.ImageColor3 = m.Overlay.Visible and Library.Theme.Accent or Library.Theme.Text
                     end
                 end)
             end
             m.Overlay.Visible = not m.Overlay.Visible
         end)
+        modalIcon = returnedModalIcon
         -- Ícone visível na mesma posição/estilo dos rows de ajustes (Corpo/Recipiente).
         -- O clique na linha APENAS liga/desliga o toggle; o modal abre só pelas 3 setinhas.
         if opts.Prebuild then
-            task.defer(function() pcall(function() self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras) end) end)
+            pcall(function() self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras) end)
         end
     end
 
-    -- Submenu (ícone de ajustes)
-    if type(opts.Settings) == "function" then
-        local sub, panel = subPanel(self, outer, 2)
+    -- Drawer (ícone de ajustes) ou submenu em linha.
+    if type(opts.Drawer) == "function" then
+        local drawer = buildDrawer(self, {
+            Name = opts.Name,
+            Build = opts.Drawer,
+            Parent = opts.DrawerParent,
+            Path = opts.DrawerPath,
+        })
+        local drawerIcon = nil
+        local _, returnedDrawerIcon = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
+            if not drawer then return end
+            if drawer.IsOpen() then
+                drawer.Close()
+            else
+                drawer.Open()
+            end
+            if drawerIcon and drawerIcon.ImageColor3 then
+                drawerIcon.ImageColor3 = drawer.IsOpen() and Library.Theme.Accent or Library.Theme.Text
+            end
+        end)
+        drawerIcon = returnedDrawerIcon
+        obj.Drawer = drawer
+    elseif type(opts.Settings) == "function" then
+        local sub, panel = subPanel(self, outer, 2, tostring(opts.Name))
         local open = false
-        local _, gi = createGearButton(row, opts.SettingsIcon or "sliders-horizontal", 20, GEAR_ZINDEX, function()
+        local gi = nil
+        local _, returnedIcon = createGearButton(row, opts.SettingsIcon or "sliders-horizontal", 20, GEAR_ZINDEX, function()
             open = not open
             panel.Visible = open
             if gi and gi.ImageColor3 then
                 gi.ImageColor3 = open and Library.Theme.Accent or Library.Theme.Text
             end
         end)
+        gi = returnedIcon
         obj.SettingsPanel = sub
         safeCall(opts.Settings, sub)
     end
@@ -386,15 +563,43 @@ function Container:Toggle(opts)
     return obj
 end
 
--- ---------- subPanel helper ----------
-local function subPanel(self, parentOuter, order)
-    local panel = create("Frame", { Size = UDim2.new(1, -16, 0, 0), Position = UDim2.fromOffset(8, 0), AutomaticSize = Enum.AutomaticSize.Y, BorderSizePixel = 0, Visible = false, LayoutOrder = order }, parentOuter)
-    bind(panel, "BackgroundColor3", "Surface2")
-    corner(panel, 4); stroke(panel, "Stroke", 0.3)
-    local inner = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, panel)
-    pad(inner, 0, 0, 3, 3); listLayout(inner, 0)
-    local sub = setmetatable({ List = inner, _order = 0, Window = self.Window, _path = (self._path or "") .. "/sub", Frame = panel }, Container)
-    return sub, panel
+-- ---------- Drawer row ----------
+function Container:Drawer(opts)
+    opts = opts or {}
+    local outer = newOuter(self, opts.Name)
+    local row = create("TextButton", {
+        Size = UDim2.new(1, 0, 0, 30),
+        BackgroundTransparency = 1,
+        Text = "",
+        AutoButtonColor = false,
+        LayoutOrder = 1,
+    }, outer)
+    separator(row)
+    label(row, opts.Name, 13, "Text", false, {
+        Position = UDim2.fromOffset(12, 0),
+        Size = UDim2.new(1, -110, 1, 0),
+        TextYAlignment = Enum.TextYAlignment.Center,
+    })
+
+    local drawer = buildDrawer(self, opts)
+    local gearIcon = nil
+    local _, returnedGearIcon = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
+        if not drawer then return end
+        if drawer.IsOpen() then
+            drawer.Close()
+        else
+            drawer.Open()
+        end
+        if gearIcon and gearIcon.ImageColor3 then
+            gearIcon.ImageColor3 = drawer.IsOpen() and Library.Theme.Accent or Library.Theme.Text
+        end
+    end)
+    gearIcon = returnedGearIcon
+    row.Activated:Connect(function()
+        if drawer then drawer.Open() end
+    end)
+
+    return drawer or { Frame = outer }
 end
 
 -- ---------- Slider ----------
@@ -757,7 +962,7 @@ function Container:Foldout(opts)
     separator(row)
     label(row, opts.Name, 13, "Text", false, { Position = UDim2.fromOffset(12, 0), Size = UDim2.new(1, -40, 1, 0), TextYAlignment = Enum.TextYAlignment.Center })
     local arrow = label(row, "▶", 11, "Text", false, { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, 0), Size = UDim2.fromOffset(14, 16), TextXAlignment = Enum.TextXAlignment.Right })
-    local sub, panel = subPanel(self, outer, 2)
+    local sub, panel = subPanel(self, outer, 2, tostring(opts.Name))
     local function setOpen(v) panel.Visible = v; arrow.Text = v and "▼" or "▶" end
     row.MouseButton1Click:Connect(function() setOpen(not panel.Visible) end)
     safeCall(opts.Build, sub)

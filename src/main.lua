@@ -548,9 +548,8 @@ local Window = Library:Window({
 local IS_MOBILE = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 pcall(function() Window:SetToggleButton(true) end)
 
--- Initialize Protection layer after Library is fully available
+-- Initialize Protection layer after Library is fully available.
 Protection.init({})
--- ESP features registered and engine started inside Protection.init()
 
 -- Tradução automática
 do
@@ -566,9 +565,57 @@ do
     end
 end
 
--- Register ESP preview modals BEFORE building visuals tab (so Controls.T can find them)
-BBC.MODALS["Jogador"] = { build = BBC.Features.buildEspPanel("Jogador"), titles = { Left = "PRÉVIA", Right = "Ajustes gerais" }, headerExtras = { leftActions = { { icon = "layout-grid", callback = function() end }, { icon = "lock", callback = function() end }, { icon = "star", callback = function() end } }, rightActions = { { icon = "sliders-horizontal", callback = function() end }, { icon = "x", callback = function(m) m.Overlay.Visible = false end } } } }
-BBC.MODALS["NPCs"] = { build = BBC.Features.buildEspPanel("NPCs"), titles = { Left = "PRÉVIA", Right = "Ajustes do NPC" }, headerExtras = { leftActions = { { icon = "layout-grid", callback = function() end }, { icon = "lock", callback = function() end }, { icon = "star", callback = function() end } }, rightActions = { { icon = "sliders-horizontal", callback = function() end }, { icon = "x", callback = function(m) m.Overlay.Visible = false end } } } }
+-- Register ESP preview modals BEFORE building visuals tab (so Controls.T can find them).
+local function espHeaderExtras()
+    return {
+        leftActions = {
+            {
+                icon = "layout-grid",
+                callback = function(m)
+                    if m.TogglePreviewGrid then
+                        m.TogglePreviewGrid()
+                    end
+                end,
+            },
+            {
+                icon = "lock",
+                callback = function(m)
+                    if m.TogglePreviewLock then
+                        m.TogglePreviewLock()
+                    end
+                end,
+            },
+            {
+                icon = "star",
+                callback = function(m)
+                    if m.ResetPreview then
+                        m.ResetPreview()
+                    end
+                end,
+            },
+        },
+        rightActions = {
+            { icon = "sliders-horizontal", callback = function(m)
+                if m.GeneralDrawer and m.GeneralDrawer.Open then m.GeneralDrawer.Open() end
+            end },
+            { icon = "x", callback = function(m) m.Overlay.Visible = false end },
+        },
+    }
+end
+
+BBC.MODALS["Jogador"] = {
+    build = BBC.Features.buildEspPanel("Jogador"),
+    titles = { Left = "PRÉVIA", Right = "AJUSTES DO JOGADOR" },
+    headerExtras = espHeaderExtras(),
+}
+BBC.MODALS["NPCs"] = {
+    build = BBC.Features.buildEspPanel("NPCs"),
+    titles = { Left = "PRÉVIA", Right = "AJUSTES DOS NPCS" },
+    headerExtras = espHeaderExtras(),
+}
+
+-- Register the canonical ESP controller before the visuals rows are built.
+Protection.registerESPFeatures()
 
 -- ---------- Features ----------
 BBC.Features.buildVisuals(Window)

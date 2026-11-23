@@ -26,6 +26,7 @@ Library.Access = "FREE"
 Library.Keybinds = {}
 Library._kbListeners = {}
 Library._toggleBinds = {}
+Library._panicListeners = {}
 Library.Tr = function(t) return t end
 
 -- Initialize feature/option tables early (before features modules load)

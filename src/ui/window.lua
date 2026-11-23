@@ -43,6 +43,7 @@ local Window = {}
 Window.__index = Window
 
 local CFG_FOLDER = "BBC_HUB/configs"
+local CONFIG_VERSION = 4
 
 local function canFS()
     return type(writefile) == "function" and type(readfile) == "function" and type(isfile) == "function"
@@ -155,7 +156,7 @@ function Window:_getModal(key, titles, build, headerExtras)
         local f = create("Frame", { Position = UDim2.new(left and 0 or 0.5, left and 0 or 4, 0, 0), Size = UDim2.new(0.5, -4, 1, 0), BorderSizePixel = 0 }, overlay)
         bind(f, "BackgroundColor3", "Surface"); corner(f, 4)
         local st = create("UIStroke", { Thickness = 1, Transparency = 0.15 }, f); bind(st, "Color", "Accent")
-        
+
         -- Header bar with title + optional extras (action buttons)
         -- Posicionamento manual (sem UIListLayout + spacer): o spacer em escala estourava
         -- a largura da coluna e empurrava os ícones para fora da própria caixa.
@@ -216,12 +217,12 @@ function Window:_getModal(key, titles, build, headerExtras)
             label(header, title or "", 12, "Muted", true, {
                 AnchorPoint = Vector2.new(1, 0.5),
                 Position = UDim2.new(1, -rightPad, 0.5, 0),
-                Size = UDim2.fromOffset(110, 22),
+                Size = UDim2.fromOffset(170, 22),
                 TextXAlignment = Enum.TextXAlignment.Right,
                 TextYAlignment = Enum.TextYAlignment.Center,
             })
         end
-        
+
         local ln = create("Frame", { Position = UDim2.fromOffset(8, 28), Size = UDim2.new(1, -16, 0, 1), BorderSizePixel = 0, BackgroundTransparency = 0.4 }, f)
         bind(ln, "BackgroundColor3", "Stroke")
         return f
@@ -239,9 +240,9 @@ function Window:_getModal(key, titles, build, headerExtras)
         CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollingDirection = Enum.ScrollingDirection.Y }, rb)
     bind(rs, "ScrollBarImageColor3", "Accent")
     listLayout(rs, 0); pad(rs, 4, 6, 0, 4)
-    m = { Overlay = overlay, Left = lbody, LeftBox = lb, RightBox = rb, RightScroll = rs, Close = function() overlay.Visible = false end }
+    m = { Overlay = overlay, Left = lbody, LeftBox = lb, RightBox = rb, RightScroll = rs, Window = self, Close = function() overlay.Visible = false end }
     modalRef.m = m
-    m.Right = setmetatable({ List = rs, _order = 0, Window = self, _path = key .. "/painel" }, Container)
+    m.Right = setmetatable({ List = rs, _order = 0, Window = self, _path = key .. "/painel", Frame = rb }, Container)
     self._modals[key] = m
     safeCall(build, m)
     return m
@@ -250,6 +251,9 @@ end
 function Window:_select(tab)
     if not tab then return end
     local switching = self.Current ~= nil and self.Current ~= tab and not self._introActive
+    if self._activeDrawer then
+        self._activeDrawer:Close()
+    end
     for _, m in pairs(self._modals or {}) do m.Overlay.Visible = false end
     for _, t in ipairs(self.Tabs) do
         t.Page.Visible = (t == tab)
@@ -336,7 +340,7 @@ function Window:SaveConfig(name, quiet)
     if not canFS() then Library:Notify({ Title = "BBC HUB", Content = "Salvar precisa de writefile no executor." }); return false end
     ensureFolders()
     local snap = self:_snapshot()
-    local ok = pcall(function() writefile(CFG_FOLDER .. "/" .. name .. ".json", HttpService:JSONEncode({ v = 3, name = name, data = snap })) end)
+    local ok = pcall(function() writefile(CFG_FOLDER .. "/" .. name .. ".json", HttpService:JSONEncode({ v = CONFIG_VERSION, name = name, data = snap })) end)
     if ok then
         self._cfgName = name
         self._lastState = stable(snap)
@@ -357,6 +361,23 @@ function Window:LoadConfig(name, quiet)
         for k in pairs(data) do
             if string.find(k, "/Jogador/", 1, true) or string.find(k, "/NPCs/", 1, true) then data[k] = nil end
         end
+    elseif decoded.v == 3 then
+        -- v3 stored modal toggles below "/painel/settings" and mixed drawer
+        -- values below the same subtree. Move the known toggle entries to the
+        -- v4 modal path and discard the ambiguous legacy drawer values.
+        local migrated = {}
+        for key, value in pairs(data) do
+            if not string.find(key, "/painel/settings/sub/", 1, true) then
+                local kind, label = string.match(key, "^(.-)/painel/settings/(.+)$")
+                if kind == "Jogador" or kind == "NPCs" then
+                    local newLabel = label == "Linhas até alvos" and "Linhas" or label
+                    migrated[kind .. "/painel/" .. newLabel] = value
+                else
+                    migrated[key] = value
+                end
+            end
+        end
+        data = migrated
     end
     self:_applyData(data)
     self._cfgName = name
@@ -381,7 +402,7 @@ function Window:_autoSaveNow()
     self._lastState = state
     ensureFolders()
     local name = self._cfgName or "default"
-    pcall(function() writefile(CFG_FOLDER .. "/" .. name .. ".json", HttpService:JSONEncode({ v = 3, name = name, data = snap })) end)
+    pcall(function() writefile(CFG_FOLDER .. "/" .. name .. ".json", HttpService:JSONEncode({ v = CONFIG_VERSION, name = name, data = snap })) end)
 end
 
 function Window:StartAutoSave()
@@ -409,11 +430,24 @@ function Window:_updateIsland()
     self:_updatePins()
 end
 
-function Library:OnPanic(fn) table.insert(Library._panicListeners, fn) end
+function Library:OnPanic(fn)
+    table.insert(Library._panicListeners, fn)
+    return function()
+        for index = #Library._panicListeners, 1, -1 do
+            if Library._panicListeners[index] == fn then
+                table.remove(Library._panicListeners, index)
+                break
+            end
+        end
+    end
+end
 function Window:SetPanic(on)
     on = on == true
     if Library.Panic == on then return end
     Library.Panic = on
+    if self._activeDrawer then
+        self._activeDrawer:Close()
+    end
     if self.Gui then self.Gui.Enabled = not on end
     if BBC.notifyGui then BBC.notifyGui.Enabled = not on end
     for _, g in ipairs(Library._panicGuis) do pcall(function() g.Enabled = not on end) end
@@ -690,6 +724,7 @@ end
 
 function Window:Destroy()
     for _, c in ipairs(self._conns) do pcall(function() c:Disconnect() end) end
+    for _, drawer in ipairs(self._drawers or {}) do pcall(function() drawer:Close() end) end
     if self.Gui then self.Gui:Destroy() end
     for i, w in ipairs(Library.Windows) do if w == self then table.remove(Library.Windows, i) break end end
 end
@@ -1030,7 +1065,7 @@ function Library:Window(opts)
     fit()
     self:_connect(gui:GetPropertyChangedSignal("AbsoluteSize"), fit)
     if intro then self:_startIntro(opts, W, H) end
-    
+
     -- Safety timeout: force-show main frame if intro gets stuck (max 15s)
     task.spawn(function()
         local introTimeout = 15
