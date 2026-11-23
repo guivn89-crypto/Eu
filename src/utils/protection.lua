@@ -1484,7 +1484,6 @@ function Protection.startESPEngine()
         return i
     end
     
-    local FONT = Library.Fonts.Bold
     local CODE = Font.fromEnum(Enum.Font.Code)
     
     local R15 = {
@@ -1495,7 +1494,7 @@ function Protection.startESPEngine()
         { "LowerTorso", "RightUpperLeg" }, { "RightUpperLeg", "RightLowerLeg" }, { "RightLowerLeg", "RightFoot" }
     }
     local R6 = { { "Head", "Torso" }, { "Torso", "Left Arm" }, { "Torso", "Right Arm" }, { "Torso", "Left Leg" }, { "Torso", "Right Leg" } }
-    local KEYS = { "highlight", "box", "name", "healthbar", "health", "distance", "tracers", "arrows", "skeleton" }
+    local KEYS = { "highlight", "box", "name", "healthbar", "health", "distance", "tracers", "skeleton" }
     
     local function anyOn(S)
         if not S then return false end
@@ -1566,13 +1565,8 @@ function Protection.startESPEngine()
         d.near = txt(r, Vector2.new(0.5, 1))
         d.near.Text = "▼"
         d.tracer = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), BorderSizePixel = 0, Visible = false }, r)
-        d.arrow = mk("TextLabel", { BackgroundTransparency = 1, Text = "▲", FontFace = FONT, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(30, 30), Visible = false, TextStrokeTransparency = 0.4 }, r)
         d.dot = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(8, 8), BorderSizePixel = 0, Visible = false }, r)
         mk("UICorner", { CornerRadius = UDim.new(1, 0) }, d.dot)
-        d.kdr = txt(r, Vector2.new(1, 0.5))
-        d.kdr.Text = "K/D: 0.00"
-        d.reports = txt(r, Vector2.new(1, 0.5))
-        d.reports.Text = "Reports: 0"
         d.hl = mk("Highlight", { DepthMode = Enum.HighlightDepthMode.AlwaysOnTop, Enabled = false }, holder)
         return d
     end
@@ -1588,10 +1582,7 @@ function Protection.startESPEngine()
         d.dist.Visible = false
         d.near.Visible = false
         d.tracer.Visible = false
-        d.arrow.Visible = false
         d.dot.Visible = false
-        d.kdr.Visible = false
-        d.reports.Visible = false
         if d.skelOn then
             for _, f in ipairs(d.skel) do f.Visible = false end
             d.skelOn = false
@@ -1609,22 +1600,12 @@ function Protection.startESPEngine()
         d.boxFull.Visible = false
         for i = 1, 8 do d.corners[i].Visible = false end
         d.hbBg.Visible = false; d.name.Visible = false; d.hp.Visible = false; d.dist.Visible = false; d.near.Visible = false
-        d.tracer.Visible = false; d.dot.Visible = false; d.arrow.Visible = false
+        d.tracer.Visible = false; d.dot.Visible = false
         if d.skelOn then for _, f in ipairs(d.skel) do f.Visible = false end; d.skelOn = false end
-        
+
         local onScreen = topV.Z > 0 and botV.Z > 0 and topV.X > -60 and topV.X < vp.X + 60 and topV.Y > -120 and botV.Y < vp.Y + 120
         if not onScreen then
             d.hl.Enabled = false
-            if S.arrows.on then
-                local rel = c.CFrame:PointToObjectSpace(t.hrp.Position)
-                local a = math.atan2(rel.X, -rel.Z)
-                local rad = math.min(vp.X, vp.Y)/2 - 40
-                d.arrow.Position = UDim2.fromOffset(vp.X/2 + math.sin(a)*rad, vp.Y/2 - math.cos(a)*rad)
-                d.arrow.Rotation = math.deg(a)
-                d.arrow.TextSize = S.arrows.size
-                d.arrow.TextColor3 = near and ncol or S.arrows.color
-                d.arrow.Visible = true
-            end
             return
         end
         
@@ -1652,7 +1633,7 @@ function Protection.startESPEngine()
                 d.dot.Visible = true; d.dot.BackgroundColor3 = boxCol; d.dot.Position = UDim2.fromOffset(cx, (top+bottom)/2)
             end
             if S.distance.on then
-                d.dist.Visible = true; d.dist.Text = distText; d.dist.TextSize = math.max(ts-1,8); d.dist.TextColor3 = S.distance.color
+                d.dist.Visible = true; d.dist.Text = distText; d.dist.TextSize = math.max(ts-1,12); d.dist.TextColor3 = S.distance.color
                 d.dist.Position = UDim2.fromOffset(cx, (top+bottom)/2 + 6)
             end
         else
@@ -1681,7 +1662,7 @@ function Protection.startESPEngine()
                 d.hbFill.Size = UDim2.fromScale(1, ratio); d.hbFill.BackgroundColor3 = hpColor(S, ratio)
             end
             if S.health.on then
-                d.hp.Visible = true; d.hp.Text = tostring(math.floor(t.hum.Health)); d.hp.TextSize = math.max(ts-2,8)
+                d.hp.Visible = true; d.hp.Text = tostring(math.floor(t.hum.Health)); d.hp.TextSize = math.max(ts-2,9)
                 d.hp.TextColor3 = (S.healthbar.auto and ratio <= 0.6) and hpColor(S, ratio) or S.health.color
                 d.hp.Position = UDim2.fromOffset(left - 5 - (S.healthbar.on and S.healthbar.width or 0), (top+bottom)/2)
             end
@@ -1700,53 +1681,10 @@ function Protection.startESPEngine()
                 d.name.Position = UDim2.fromOffset(nameX, top - 2)
             end
             if S.distance.on then
-                d.dist.Visible = true; d.dist.Text = distText; d.dist.TextSize = math.max(ts-1,8); d.dist.TextColor3 = S.distance.color
+                d.dist.Visible = true; d.dist.Text = distText; d.dist.TextSize = math.max(ts-1,12); d.dist.TextColor3 = S.distance.color
                 d.dist.Size = UDim2.fromOffset(120, 14)
                 local distX = cx - d.dist.TextBounds.X / 2
                 d.dist.Position = UDim2.fromOffset(distX, bottom + 2)
-            end
-            -- K/D display
-            if S.kdr and S.kdr.on then
-                local kdrValue = "0.00"
-                local pl = Players:GetPlayerFromCharacter(t.model)
-                if pl then
-                    local leaderstats = pl:FindFirstChild("leaderstats")
-                    if leaderstats then
-                        local kills = leaderstats:FindFirstChild("Kills") or leaderstats:FindFirstChild("K")
-                        local deaths = leaderstats:FindFirstChild("Deaths") or leaderstats:FindFirstChild("D")
-                        if kills and deaths then
-                            local k = kills.Value or 0
-                            local d = deaths.Value or 0
-                            if d > 0 then kdrValue = string.format("%.2f", k/d) else kdrValue = tostring(k) end
-                        end
-                    end
-                end
-                d.kdr.Visible = true
-                d.kdr.Text = "K/D: " .. kdrValue
-                d.kdr.TextSize = math.max(ts-1, 8)
-                d.kdr.TextColor3 = S.kdr.color
-                d.kdr.Position = UDim2.fromOffset(left + wid + 5, (top+bottom)/2 - 10)
-            else
-                d.kdr.Visible = false
-            end
-            -- Reports display
-            if S.reports and S.reports.on then
-                local reportsValue = "0"
-                local pl = Players:GetPlayerFromCharacter(t.model)
-                if pl then
-                    local leaderstats = pl:FindFirstChild("leaderstats")
-                    if leaderstats then
-                        local reports = leaderstats:FindFirstChild("Reports") or leaderstats:FindFirstChild("Report")
-                        if reports then reportsValue = tostring(reports.Value or 0) end
-                    end
-                end
-                d.reports.Visible = true
-                d.reports.Text = "Reports: " .. reportsValue
-                d.reports.TextSize = math.max(ts-1, 8)
-                d.reports.TextColor3 = S.reports.color
-                d.reports.Position = UDim2.fromOffset(left + wid + 5, (top+bottom)/2 + 10)
-            else
-                d.reports.Visible = false
             end
             if S.skeleton.on then
                 local list = t.model:FindFirstChild("UpperTorso") and R15 or R6
@@ -1766,10 +1704,6 @@ function Protection.startESPEngine()
         if S.tracers.on then
             local fromBottom = S.tracers.origin == "Baixo"
             lineF(d.tracer, vp.X/2, fromBottom and vp.Y or 0, cx, fromBottom and bottom or top, S.tracers.thick, near and ncol or S.tracers.color)
-        end
-        if S.arrows.on then
-            d.arrow.Visible = true; d.arrow.TextColor3 = near and ncol or S.arrows.color; d.arrow.Size = UDim2.fromOffset(S.arrows.size, S.arrows.size)
-            d.arrow.Position = UDim2.fromOffset(cx, top - 16); d.arrow.Rotation = 0
         end
         d.hl.Enabled = hl.on
         d.hl.FillColor = near and ncol or hl.color
@@ -1920,10 +1854,7 @@ function Protection.registerESPFeatures()
         healthbar = { on = false, auto = true, color = Color3.fromRGB(45, 205, 190), width = 2, side = "Esquerda" },
         health = { on = false, color = Color3.fromRGB(70, 220, 90) },
         distance = { on = false, color = Color3.fromRGB(235, 235, 235), unit = "m" },
-        kdr = { on = false, color = Color3.fromRGB(255, 200, 90) },
-        reports = { on = false, color = Color3.fromRGB(255, 140, 90) },
         tracers = { on = false, color = Color3.fromRGB(255, 255, 255), thick = 1, origin = "Baixo" },
-        arrows = { on = false, color = Color3.fromRGB(255, 90, 90), size = 18 },
         skeleton = { on = false, color = Color3.fromRGB(255, 255, 255), thick = 1.5 },
         frozen = false, locked = false,
         lod = { on = true, near = 150 }, nearest = { on = false, color = Color3.fromRGB(255, 60, 60) },
@@ -1975,10 +1906,7 @@ function Protection.registerESPFeatures()
             S.healthbar.on = false
             S.health.on = false
             S.distance.on = false
-            S.kdr.on = false
-            S.reports.on = false
             S.tracers.on = false
-            S.arrows.on = false
             S.skeleton.on = false
             
             -- Immediately clean up all drawings for this kind
@@ -2001,8 +1929,6 @@ function Protection.registerESPFeatures()
     Library.Features["Barra de vida"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.healthbar.on = v end end
     Library.Features["Vida"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.health.on = v end end
     Library.Features["Linhas"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.tracers.on = v end end
-    Library.Features["Linhas até alvos"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.tracers.on = v end end
-    Library.Features["Setas"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.arrows.on = v end end
     Library.Features["Esqueleto"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.skeleton.on = v end end
     Library.Features["Destaque próprio"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.nearest.on = v end end
 end

@@ -39,8 +39,9 @@ Laranjas da Prévia ESP (visuals.lua, fixos por design):
   `AnchorPoint (1, 0.5)`, `Position (1, -62, 0.5, 0)` → `-(padding 12 + 44 + gap 6)`.
 - Fonte única: `createGearButton()` em `ui/components.lua`. Ícones são Lucide via `Utils.icon`
   (`BBC.lucide`, com fallback de glyph quando o download falha).
-- Rows com modal (Jogador/NPCs): o mesmo gear **fica visível** e abre o modal; o clique na
-  linha também abre. Rows com submenu (Corpo/Recipiente): gear abre o `subPanel`.
+- Rows com modal (Jogador/NPCs): o gear **fica visível** e é o **único** gatilho do modal —
+  o clique na linha/pill só **liga e desliga** o toggle (a aba VISUAIS continua aberta).
+  Rows com submenu (Corpo/Recipiente): gear abre o `subPanel`.
 - Estado ativo: `ImageColor3` = `Library.Theme.Accent` quando aberto, `Text` quando fechado.
 
 ## 3. Tela dividida do modal ESP (PRÉVIA + AJUSTES DO JOGADOR)
@@ -61,6 +62,10 @@ transbordava os ícones para a coluna vizinha):
   sem clipar a cabeça e sem tocar a grade. Partes em escala do holder:
   Head 0.28×0.18 @(0.36,0.02) · Torso 0.46×0.36 @(0.27,0.22) · Braços 0.20×0.36
   @(0.04/0.76, 0.22) · Pernas 0.21×0.38 @(0.27/0.52, 0.60). Canto 8 na cabeça, 4 no resto.
+  Cada parte tem **UIStroke escuro de 1px** (preto, transparência 0.35, **sem** `bind` de tema —
+  é o mesmo contorno preto do Chams no jogo).
+- **Sombra de chão**: elipse (`UICorner` 1,0 + `UIGradient` 1→0→1) 64%×5% sob os pés,
+  `ZIndex 1` (atrás do boneco).
 - **Logo "BBC HUB" no tronco**: `ImageLabel` se `BBC.Config.LogoAssetId` existir; senão
   `TextLabel` "BBC HUB" `TextScaled`, branco, transparência 0.25, 92%×55% do Torso.
 - Overlays ligados aos toggles (defaults: chams/box/skeleton/name/distance/healthbar ON):
@@ -71,14 +76,16 @@ transbordava os ícones para a coluna vizinha):
   - **Contorno**: `boundingBox` (frame 1,1 do holder) com `UIStroke` `#FF8C00`.
   - **Esqueleto**: linhas com comprimento em **PIXELS** (`lineSpec` usa `holder.AbsoluteSize`);
     nunca compute distância na escala 0–1 (linhas ficam sub-pixel/invisíveis). Re-sincroniza
-    em `GetPropertyChangedSignal("AbsoluteSize")`.
-- **Grade 3×4 de quick-toggles** (11 botões: Destaque, Caixa, Nome, Barra vida, Vida,
-  Distância, K/D, Denúncias, Linhas, Setas, Esqueleto): `toggleButtonsFrame`
-  `Size (1, 0, 0, 98)`, fundeado `(0.5, 0, 1, -3)` → **98px = 3×30 + 2×4 de gap**,
-  ~8px de respiro até a borda laranja. `UIGridLayout` células **44×30**, gap 4,
-  4 células por linha (4+4+3), alinhamento central. Célula: `TextScaled = true` +
-  `UITextSizeConstraint` (Min 7, Max 10) para **nunca cortar** rótulos longos ("Denúncias").
-  Botão on = `Accent` + texto branco; off = `Surface2` + `Text`, stroke `Accent`/`Stroke`.
+    em `GetPropertyChangedSignal("AbsoluteSize")`. Juntas nos **centros dos membros**:
+    pescoço `(0.5,0.21)`, mãos `(0.14/0.86, 0.58)`, pés `(0.375/0.625, 0.98)`.
+- **Grade 2×4 de quick-toggles** (8 botões: Destaque, Caixa, Nome, Barra vida | Vida,
+  Distância, Linhas, Esqueleto): `toggleButtonsFrame` `Size (1, 0, 0, 64)`, fundeado
+  `(0.5, 0, 1, -3)` → **64px = 2×30 + 1×4 de gap**, ~8px de respiro até a borda laranja.
+  `UIGridLayout` células **44×30**, gap 4, 4 células por linha (4+4), alinhamento central.
+  Célula: `TextScaled = true` + `UITextSizeConstraint` (Min 7, Max 10) para **nunca cortar**
+  rótulos longos ("Distância"). Botão on = `Accent` + texto branco; off = `Surface2` + `Text`,
+  stroke `Accent`/`Stroke`. Features **K/D, Denúncias e Setas não existem** — removidas
+  do ESP, da prévia e dos ajustes do jogador.
 
 ### Coluna direita — AJUSTES DO JOGADOR
 - Scroll a partir de `y=32`, altura `1, -32-50` (reserva 40px de rodapé).

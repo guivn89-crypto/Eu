@@ -2196,7 +2196,6 @@ function Protection.startESPEngine()
         return i
     end
     
-    local FONT = Library.Fonts.Bold
     local CODE = Font.fromEnum(Enum.Font.Code)
     
     local R15 = {
@@ -2207,7 +2206,7 @@ function Protection.startESPEngine()
         { "LowerTorso", "RightUpperLeg" }, { "RightUpperLeg", "RightLowerLeg" }, { "RightLowerLeg", "RightFoot" }
     }
     local R6 = { { "Head", "Torso" }, { "Torso", "Left Arm" }, { "Torso", "Right Arm" }, { "Torso", "Left Leg" }, { "Torso", "Right Leg" } }
-    local KEYS = { "highlight", "box", "name", "healthbar", "health", "distance", "tracers", "arrows", "skeleton" }
+    local KEYS = { "highlight", "box", "name", "healthbar", "health", "distance", "tracers", "skeleton" }
     
     local function anyOn(S)
         if not S then return false end
@@ -2278,13 +2277,8 @@ function Protection.startESPEngine()
         d.near = txt(r, Vector2.new(0.5, 1))
         d.near.Text = "▼"
         d.tracer = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), BorderSizePixel = 0, Visible = false }, r)
-        d.arrow = mk("TextLabel", { BackgroundTransparency = 1, Text = "▲", FontFace = FONT, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(30, 30), Visible = false, TextStrokeTransparency = 0.4 }, r)
         d.dot = mk("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(8, 8), BorderSizePixel = 0, Visible = false }, r)
         mk("UICorner", { CornerRadius = UDim.new(1, 0) }, d.dot)
-        d.kdr = txt(r, Vector2.new(1, 0.5))
-        d.kdr.Text = "K/D: 0.00"
-        d.reports = txt(r, Vector2.new(1, 0.5))
-        d.reports.Text = "Reports: 0"
         d.hl = mk("Highlight", { DepthMode = Enum.HighlightDepthMode.AlwaysOnTop, Enabled = false }, holder)
         return d
     end
@@ -2300,10 +2294,7 @@ function Protection.startESPEngine()
         d.dist.Visible = false
         d.near.Visible = false
         d.tracer.Visible = false
-        d.arrow.Visible = false
         d.dot.Visible = false
-        d.kdr.Visible = false
-        d.reports.Visible = false
         if d.skelOn then
             for _, f in ipairs(d.skel) do f.Visible = false end
             d.skelOn = false
@@ -2321,22 +2312,12 @@ function Protection.startESPEngine()
         d.boxFull.Visible = false
         for i = 1, 8 do d.corners[i].Visible = false end
         d.hbBg.Visible = false; d.name.Visible = false; d.hp.Visible = false; d.dist.Visible = false; d.near.Visible = false
-        d.tracer.Visible = false; d.dot.Visible = false; d.arrow.Visible = false
+        d.tracer.Visible = false; d.dot.Visible = false
         if d.skelOn then for _, f in ipairs(d.skel) do f.Visible = false end; d.skelOn = false end
-        
+
         local onScreen = topV.Z > 0 and botV.Z > 0 and topV.X > -60 and topV.X < vp.X + 60 and topV.Y > -120 and botV.Y < vp.Y + 120
         if not onScreen then
             d.hl.Enabled = false
-            if S.arrows.on then
-                local rel = c.CFrame:PointToObjectSpace(t.hrp.Position)
-                local a = math.atan2(rel.X, -rel.Z)
-                local rad = math.min(vp.X, vp.Y)/2 - 40
-                d.arrow.Position = UDim2.fromOffset(vp.X/2 + math.sin(a)*rad, vp.Y/2 - math.cos(a)*rad)
-                d.arrow.Rotation = math.deg(a)
-                d.arrow.TextSize = S.arrows.size
-                d.arrow.TextColor3 = near and ncol or S.arrows.color
-                d.arrow.Visible = true
-            end
             return
         end
         
@@ -2364,7 +2345,7 @@ function Protection.startESPEngine()
                 d.dot.Visible = true; d.dot.BackgroundColor3 = boxCol; d.dot.Position = UDim2.fromOffset(cx, (top+bottom)/2)
             end
             if S.distance.on then
-                d.dist.Visible = true; d.dist.Text = distText; d.dist.TextSize = math.max(ts-1,8); d.dist.TextColor3 = S.distance.color
+                d.dist.Visible = true; d.dist.Text = distText; d.dist.TextSize = math.max(ts-1,12); d.dist.TextColor3 = S.distance.color
                 d.dist.Position = UDim2.fromOffset(cx, (top+bottom)/2 + 6)
             end
         else
@@ -2393,7 +2374,7 @@ function Protection.startESPEngine()
                 d.hbFill.Size = UDim2.fromScale(1, ratio); d.hbFill.BackgroundColor3 = hpColor(S, ratio)
             end
             if S.health.on then
-                d.hp.Visible = true; d.hp.Text = tostring(math.floor(t.hum.Health)); d.hp.TextSize = math.max(ts-2,8)
+                d.hp.Visible = true; d.hp.Text = tostring(math.floor(t.hum.Health)); d.hp.TextSize = math.max(ts-2,9)
                 d.hp.TextColor3 = (S.healthbar.auto and ratio <= 0.6) and hpColor(S, ratio) or S.health.color
                 d.hp.Position = UDim2.fromOffset(left - 5 - (S.healthbar.on and S.healthbar.width or 0), (top+bottom)/2)
             end
@@ -2412,53 +2393,10 @@ function Protection.startESPEngine()
                 d.name.Position = UDim2.fromOffset(nameX, top - 2)
             end
             if S.distance.on then
-                d.dist.Visible = true; d.dist.Text = distText; d.dist.TextSize = math.max(ts-1,8); d.dist.TextColor3 = S.distance.color
+                d.dist.Visible = true; d.dist.Text = distText; d.dist.TextSize = math.max(ts-1,12); d.dist.TextColor3 = S.distance.color
                 d.dist.Size = UDim2.fromOffset(120, 14)
                 local distX = cx - d.dist.TextBounds.X / 2
                 d.dist.Position = UDim2.fromOffset(distX, bottom + 2)
-            end
-            -- K/D display
-            if S.kdr and S.kdr.on then
-                local kdrValue = "0.00"
-                local pl = Players:GetPlayerFromCharacter(t.model)
-                if pl then
-                    local leaderstats = pl:FindFirstChild("leaderstats")
-                    if leaderstats then
-                        local kills = leaderstats:FindFirstChild("Kills") or leaderstats:FindFirstChild("K")
-                        local deaths = leaderstats:FindFirstChild("Deaths") or leaderstats:FindFirstChild("D")
-                        if kills and deaths then
-                            local k = kills.Value or 0
-                            local d = deaths.Value or 0
-                            if d > 0 then kdrValue = string.format("%.2f", k/d) else kdrValue = tostring(k) end
-                        end
-                    end
-                end
-                d.kdr.Visible = true
-                d.kdr.Text = "K/D: " .. kdrValue
-                d.kdr.TextSize = math.max(ts-1, 8)
-                d.kdr.TextColor3 = S.kdr.color
-                d.kdr.Position = UDim2.fromOffset(left + wid + 5, (top+bottom)/2 - 10)
-            else
-                d.kdr.Visible = false
-            end
-            -- Reports display
-            if S.reports and S.reports.on then
-                local reportsValue = "0"
-                local pl = Players:GetPlayerFromCharacter(t.model)
-                if pl then
-                    local leaderstats = pl:FindFirstChild("leaderstats")
-                    if leaderstats then
-                        local reports = leaderstats:FindFirstChild("Reports") or leaderstats:FindFirstChild("Report")
-                        if reports then reportsValue = tostring(reports.Value or 0) end
-                    end
-                end
-                d.reports.Visible = true
-                d.reports.Text = "Reports: " .. reportsValue
-                d.reports.TextSize = math.max(ts-1, 8)
-                d.reports.TextColor3 = S.reports.color
-                d.reports.Position = UDim2.fromOffset(left + wid + 5, (top+bottom)/2 + 10)
-            else
-                d.reports.Visible = false
             end
             if S.skeleton.on then
                 local list = t.model:FindFirstChild("UpperTorso") and R15 or R6
@@ -2478,10 +2416,6 @@ function Protection.startESPEngine()
         if S.tracers.on then
             local fromBottom = S.tracers.origin == "Baixo"
             lineF(d.tracer, vp.X/2, fromBottom and vp.Y or 0, cx, fromBottom and bottom or top, S.tracers.thick, near and ncol or S.tracers.color)
-        end
-        if S.arrows.on then
-            d.arrow.Visible = true; d.arrow.TextColor3 = near and ncol or S.arrows.color; d.arrow.Size = UDim2.fromOffset(S.arrows.size, S.arrows.size)
-            d.arrow.Position = UDim2.fromOffset(cx, top - 16); d.arrow.Rotation = 0
         end
         d.hl.Enabled = hl.on
         d.hl.FillColor = near and ncol or hl.color
@@ -2632,10 +2566,7 @@ function Protection.registerESPFeatures()
         healthbar = { on = false, auto = true, color = Color3.fromRGB(45, 205, 190), width = 2, side = "Esquerda" },
         health = { on = false, color = Color3.fromRGB(70, 220, 90) },
         distance = { on = false, color = Color3.fromRGB(235, 235, 235), unit = "m" },
-        kdr = { on = false, color = Color3.fromRGB(255, 200, 90) },
-        reports = { on = false, color = Color3.fromRGB(255, 140, 90) },
         tracers = { on = false, color = Color3.fromRGB(255, 255, 255), thick = 1, origin = "Baixo" },
-        arrows = { on = false, color = Color3.fromRGB(255, 90, 90), size = 18 },
         skeleton = { on = false, color = Color3.fromRGB(255, 255, 255), thick = 1.5 },
         frozen = false, locked = false,
         lod = { on = true, near = 150 }, nearest = { on = false, color = Color3.fromRGB(255, 60, 60) },
@@ -2687,10 +2618,7 @@ function Protection.registerESPFeatures()
             S.healthbar.on = false
             S.health.on = false
             S.distance.on = false
-            S.kdr.on = false
-            S.reports.on = false
             S.tracers.on = false
-            S.arrows.on = false
             S.skeleton.on = false
             
             -- Immediately clean up all drawings for this kind
@@ -2713,8 +2641,6 @@ function Protection.registerESPFeatures()
     Library.Features["Barra de vida"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.healthbar.on = v end end
     Library.Features["Vida"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.health.on = v end end
     Library.Features["Linhas"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.tracers.on = v end end
-    Library.Features["Linhas até alvos"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.tracers.on = v end end
-    Library.Features["Setas"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.arrows.on = v end end
     Library.Features["Esqueleto"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.skeleton.on = v end end
     Library.Features["Destaque próprio"] = function(v) if Library.ESP and Library.ESP.Jogador then Library.ESP.Jogador.nearest.on = v end end
 end
@@ -3319,11 +3245,12 @@ function Container:Toggle(opts)
     row.MouseEnter:Connect(function() if not locked then tween(row, { BackgroundTransparency = 0.93 }, 0.12) end end)
     row.MouseLeave:Connect(function() tween(row, { BackgroundTransparency = 1 }, 0.18) end)
 
-    -- Modal (painel grande) - click entire row to open
+    -- Modal (painel grande) - abre SOMENTE pelas 3 setinhas
     if type(opts.Modal) == "function" then
         local key = (self._path or "") .. "/" .. tostring(opts.Name)
         local hooked = false
-        local modalBtn = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
+        local modalBtn = nil
+        modalBtn = createGearButton(row, "sliders-horizontal", 20, GEAR_ZINDEX, function()
             local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras)
             if not hooked then
                 hooked = true
@@ -3335,24 +3262,8 @@ function Container:Toggle(opts)
             end
             m.Overlay.Visible = not m.Overlay.Visible
         end)
-        -- Ícone visível na mesma posição/estilo dos rows de ajustes (Corpo/Recipiente);
-        -- o clique na linha também abre o modal.
-        
-        -- Make entire row click open the modal
-        row.MouseButton1Click:Connect(function()
-            if row:GetAttribute("TipHeld") then return end
-            if locked then return end
-            local m = self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras)
-            if not hooked then
-                hooked = true
-                m.Overlay:GetPropertyChangedSignal("Visible"):Connect(function()
-                    if modalBtn and modalBtn.ImageColor3 then
-                        modalBtn.ImageColor3 = m.Overlay.Visible and Library.Theme.Accent or Library.Theme.Text
-                    end
-                end)
-            end
-            m.Overlay.Visible = not m.Overlay.Visible
-        end)
+        -- Ícone visível na mesma posição/estilo dos rows de ajustes (Corpo/Recipiente).
+        -- O clique na linha APENAS liga/desliga o toggle; o modal abre só pelas 3 setinhas.
         if opts.Prebuild then
             task.defer(function() pcall(function() self.Window:_getModal(key, opts.ModalTitles, opts.Modal, opts.ModalHeaderExtras) end) end)
         end
@@ -5140,20 +5051,18 @@ local function SetupCharacterPreview(previewContainer)
     -- Colors
     local CHAMS_COLOR = Color3.fromRGB(255, 130, 0)
     local CHAMS_TRANSPARENCY = 0.45
-    local STROKE_COLOR = Color3.fromRGB(255, 165, 0)
-    local STROKE_THICKNESS = 1.5
+    local STROKE_COLOR = Color3.fromRGB(0, 0, 0)
+    local STROKE_TRANSPARENCY = 0.35
+    local STROKE_THICKNESS = 1
     local BOX_STROKE_COLOR = Color3.fromRGB(255, 140, 0)
     local SKELETON_COLOR = Color3.fromRGB(255, 255, 255)
     local SKELETON_THICKNESS = 1.5
     local HEALTH_BAR_WIDTH = 4
     local HEALTH_BAR_COLOR = Color3.fromRGB(45, 205, 190)
     local HEALTH_BAR_BG = Color3.fromRGB(0, 0, 0)
-    local KDR_COLOR = Color3.fromRGB(255, 200, 90)
-    local REPORTS_COLOR = Color3.fromRGB(255, 140, 90)
-    local TRACER_COLOR = Color3.fromRGB(255, 255, 255)
-    local ARROW_COLOR = Color3.fromRGB(255, 90, 90)
+    local SHADOW_COLOR = Color3.fromRGB(0, 0, 0)
 
-    -- 1. Character Holder (reduzido e centralizado no terço superior, acima da grade 3x4)
+    -- 1. Character Holder (reduzido e centralizado no terço superior, acima da grade 2x4)
     local holder = create("Frame", {
         Name = "PreviewHolder",
         BackgroundTransparency = 1,
@@ -5178,8 +5087,13 @@ local function SetupCharacterPreview(previewContainer)
 
         corner(part, cornerRadius or 4)
 
-        local partStroke = stroke(part, "Accent", 0, STROKE_THICKNESS)
-        partStroke.Color = STROKE_COLOR
+        -- Contorno escuro de 1px (independente do tema, igual ao outline do Chams no jogo)
+        create("UIStroke", {
+            Thickness = STROKE_THICKNESS,
+            Transparency = STROKE_TRANSPARENCY,
+            Color = STROKE_COLOR,
+            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+        }, part)
 
         -- Add BBC HUB logo on Torso (asset se configurado; senão, logo em texto)
         if name == "Torso" then
@@ -5225,6 +5139,26 @@ local function SetupCharacterPreview(previewContainer)
     createChamsPart("LeftLeg",  UDim2.fromScale(0.21, 0.38), UDim2.fromScale(0.27, 0.60), 4)
     createChamsPart("RightLeg", UDim2.fromScale(0.21, 0.38), UDim2.fromScale(0.52, 0.60), 4)
 
+    -- Sombra/glow sutil no chão (elipse escura sob os pés, atrás do boneco)
+    local floorShadow = create("Frame", {
+        Name = "FloorShadow",
+        BackgroundColor3 = SHADOW_COLOR,
+        BackgroundTransparency = 0.55,
+        BorderSizePixel = 0,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 1.0),
+        Size = UDim2.fromScale(0.64, 0.05),
+        ZIndex = 1,
+    }, holder)
+    create("UICorner", { CornerRadius = UDim.new(1, 0) }, floorShadow)
+    create("UIGradient", {
+        Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 1),
+            NumberSequenceKeypoint.new(0.5, 0),
+            NumberSequenceKeypoint.new(1, 1),
+        }),
+    }, floorShadow)
+
     -- 3. ESP Overlays
     -- Bounding Box
     local boundingBox = create("Frame", {
@@ -5244,14 +5178,14 @@ local function SetupCharacterPreview(previewContainer)
     -- Joint positions (relative to holder scale 0-1)
     local joints = {
         HeadTop     = Vector2.new(0.5, 0.02),
-        Neck        = Vector2.new(0.5, 0.20),
+        Neck        = Vector2.new(0.5, 0.21),
         LeftShoulder  = Vector2.new(0.27, 0.22),
         RightShoulder = Vector2.new(0.73, 0.22),
-        LeftHand    = Vector2.new(0.04, 0.58),
-        RightHand   = Vector2.new(0.96, 0.58),
-        Pelvis      = Vector2.new(0.5, 0.58),
-        LeftFoot    = Vector2.new(0.37, 0.98),
-        RightFoot   = Vector2.new(0.63, 0.98),
+        LeftHand    = Vector2.new(0.14, 0.58),
+        RightHand   = Vector2.new(0.86, 0.58),
+        Pelvis      = Vector2.new(0.5, 0.59),
+        LeftFoot    = Vector2.new(0.375, 0.98),
+        RightFoot   = Vector2.new(0.625, 0.98),
     }
 
     -- Pares de juntas na ordem em que as linhas são criadas
@@ -5320,78 +5254,16 @@ local function SetupCharacterPreview(previewContainer)
         ZIndex = 4,
     }, healthBarBg)
 
-    -- K/D Label (ancorada à direita do holder para não vazar da prévia)
-    local kdrLabel = create("TextLabel", {
-        Name = "KDRLabel",
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 14),
-        Position = UDim2.fromScale(0.99, 0.35),
-        AnchorPoint = Vector2.new(1, 0.5),
-        Text = "K/D: 2.50",
-        TextColor3 = KDR_COLOR,
-        TextSize = 10,
-        FontFace = Library.Fonts.Medium,
-        TextXAlignment = Enum.TextXAlignment.Right,
-        ZIndex = 5,
-        Visible = false,
-    }, holder)
-    local kdrStroke = stroke(kdrLabel, "Stroke", 0, 1)
-    kdrStroke.Color = Color3.fromRGB(0, 0, 0)
-
-    -- Reports Label (ancorada à direita do holder para não vazar da prévia)
-    local reportsLabel = create("TextLabel", {
-        Name = "ReportsLabel",
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 14),
-        Position = UDim2.fromScale(0.99, 0.45),
-        AnchorPoint = Vector2.new(1, 0.5),
-        Text = "Reports: 0",
-        TextColor3 = REPORTS_COLOR,
-        TextSize = 10,
-        FontFace = Library.Fonts.Medium,
-        TextXAlignment = Enum.TextXAlignment.Right,
-        ZIndex = 5,
-        Visible = false,
-    }, holder)
-    local reportsStroke = stroke(reportsLabel, "Stroke", 0, 1)
-    reportsStroke.Color = Color3.fromRGB(0, 0, 0)
-
-    -- Tracer Line (from bottom center to box center)
-    local tracerLine = create("Frame", {
-        Name = "TracerLine",
-        BackgroundColor3 = TRACER_COLOR,
-        BorderSizePixel = 0,
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        ZIndex = 3,
-        Visible = false,
-    }, holder)
-
-    -- Arrow (above head for off-screen indicator)
-    local arrowLabel = create("TextLabel", {
-        Name = "ArrowLabel",
-        BackgroundTransparency = 1,
-        Text = "▲",
-        FontFace = Library.Fonts.Bold,
-        TextColor3 = ARROW_COLOR,
-        TextSize = 16,
-        TextStrokeTransparency = 0.4,
-        TextStrokeColor3 = Color3.new(0, 0, 0),
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Size = UDim2.fromOffset(20, 20),
-        ZIndex = 5,
-        Visible = false,
-    }, holder)
-
     -- Labels
     local nameLabel = create("TextLabel", {
         Name = "NameLabel",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 16),
+        Size = UDim2.new(1, 0, 0, 18),
         Position = UDim2.fromScale(0.5, -0.03),
         AnchorPoint = Vector2.new(0.5, 1),
         Text = "Jogador",
         TextColor3 = Color3.fromRGB(255, 255, 255),
-        TextSize = 12,
+        TextSize = 16,
         FontFace = Library.Fonts.Bold,
         TextXAlignment = Enum.TextXAlignment.Center,
         ZIndex = 5,
@@ -5426,10 +5298,6 @@ local function SetupCharacterPreview(previewContainer)
         distance = true,
         healthbar = true,
         health = true,
-        kdr = false,
-        reports = false,
-        tracers = false,
-        arrows = false,
         color = CHAMS_COLOR,
         previewHealth = 100,
         previewDistance = "1133m",
@@ -5448,8 +5316,6 @@ local function SetupCharacterPreview(previewContainer)
             math.floor(c.B * 255 * 0.85)
         )
         healthBarFill.BackgroundColor3 = c
-        tracerLine.BackgroundColor3 = c
-        arrowLabel.TextColor3 = c
     end
 
     local function updateHealthBar()
@@ -5459,24 +5325,8 @@ local function SetupCharacterPreview(previewContainer)
         healthBarFill.Size = UDim2.fromScale(1, ratio)
     end
 
-    local function updateTracer()
-        local boxCenter = Vector2.new(0.5, 0.5)
-        local screenBottom = Vector2.new(0.5, 1.1)
-        local dx = (boxCenter.X - screenBottom.X) * holder.AbsoluteSize.X
-        local dy = (boxCenter.Y - screenBottom.Y) * holder.AbsoluteSize.Y
-        local dist = math.sqrt(dx * dx + dy * dy)
-        local angle = math.atan2(dy, dx)
-        tracerLine.Size = UDim2.fromOffset(dist, 1.5)
-        tracerLine.Position = UDim2.fromScale(0.5, 0.55)
-        tracerLine.Rotation = math.deg(angle)
-    end
-
-    local function updateArrow()
-        arrowLabel.Position = UDim2.fromScale(0.5, -0.15)
-    end
-
     -- Re-sincroniza overlays dependentes de tamanho quando o holder muda de tamanho
-    -- (esqueleto em pixels, barra de vida e tracer), cobrindo o caso de layout inicial.
+    -- (esqueleto em pixels e barra de vida), cobrindo o caso de layout inicial.
     holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
         for i, pair in ipairs(jointPairs) do
             local line = skeletonLines[i]
@@ -5487,7 +5337,6 @@ local function SetupCharacterPreview(previewContainer)
             end
         end
         if state.healthbar then updateHealthBar() end
-        if state.tracers then updateTracer() end
     end)
 
     local controller = {}
@@ -5531,28 +5380,6 @@ local function SetupCharacterPreview(previewContainer)
         state.health = enabled
     end
 
-    function controller.SetKDR(enabled)
-        state.kdr = enabled
-        kdrLabel.Visible = enabled
-    end
-
-    function controller.SetReports(enabled)
-        state.reports = enabled
-        reportsLabel.Visible = enabled
-    end
-
-    function controller.SetTracers(enabled)
-        state.tracers = enabled
-        tracerLine.Visible = enabled
-        if enabled then updateTracer() end
-    end
-
-    function controller.SetArrows(enabled)
-        state.arrows = enabled
-        arrowLabel.Visible = enabled
-        if enabled then updateArrow() end
-    end
-
     function controller.SetColor(c)
         state.color = c
         applyColor(c)
@@ -5568,24 +5395,12 @@ local function SetupCharacterPreview(previewContainer)
         distanceLabel.Text = dist
     end
 
-    function controller.SetPreviewKDR(kdr)
-        kdrLabel.Text = "K/D: " .. tostring(kdr)
-    end
-
-    function controller.SetPreviewReports(reports)
-        reportsLabel.Text = "Reports: " .. tostring(reports)
-    end
-
     -- Draggable repositioning for preview elements
     local dragElements = {
         nameLabel = nameLabel,
         distanceLabel = distanceLabel,
         healthBarBg = healthBarBg,
         boundingBox = boundingBox,
-        arrowLabel = arrowLabel,
-        tracerLine = tracerLine,
-        kdrLabel = kdrLabel,
-        reportsLabel = reportsLabel,
     }
     local dragOffsets = {}
 
@@ -5657,10 +5472,6 @@ local function SetupCharacterPreview(previewContainer)
     controller.SetDistance(state.distance)
     controller.SetHealthBar(state.healthbar)
     controller.SetHealth(state.health)
-    controller.SetKDR(state.kdr)
-    controller.SetReports(state.reports)
-    controller.SetTracers(state.tracers)
-    controller.SetArrows(state.arrows)
     controller.SetPreviewHealth(state.previewHealth)
     controller.SetPreviewDistance(state.previewDistance)
 
@@ -5737,15 +5548,15 @@ local function buildEspPanel(kind)
         Library.ESPPreviewControllers = Library.ESPPreviewControllers or {}
         Library.ESPPreviewControllers[kind] = previewController
 
-        -- Quick-Toggle Button Grid at Preview Bottom (3 rows x 4 cols)
-        -- 98px = 3 linhas de 30 + 2 gaps de 4; fica 3px acima do container
+        -- Quick-Toggle Button Grid at Preview Bottom (2 rows x 4 cols)
+        -- 64px = 2 linhas de 30 + 1 gap de 4; fica 3px acima do container
         -- (~8px de respiro até a borda laranja) e abaixo do rótulo de distância.
         local toggleButtonsFrame = create("Frame", {
             Name = "QuickTogglesGrid",
             BackgroundTransparency = 1,
             AnchorPoint = Vector2.new(0.5, 1),
             Position = UDim2.new(0.5, 0, 1, -3),
-            Size = UDim2.new(1, 0, 0, 98),
+            Size = UDim2.new(1, 0, 0, 64),
         }, previewContainer)
         local gridLayout = create("UIGridLayout", {
             CellSize = UDim2.fromOffset(44, 30),
@@ -5765,10 +5576,8 @@ local function buildEspPanel(kind)
             { key = "healthbar", label = "Barra vida", setter = function(v) previewController.SetHealthBar(v) end },
             { key = "health", label = "Vida", setter = function(v) previewController.SetHealth(v) end },
             { key = "distance", label = "Distância", setter = function(v) previewController.SetDistance(v) end },
-            { key = "kdr", label = "K/D", setter = function(v) previewController.SetKDR(v) end },
-            { key = "reports", label = "Denúncias", setter = function(v) previewController.SetReports(v) end },
-            { key = "tracers", label = "Linhas", setter = function(v) previewController.SetTracers(v) end },
-            { key = "arrows", label = "Setas", setter = function(v) previewController.SetArrows(v) end },
+            -- "Linhas" (tracers) só existe no jogo: a flag S.tracers.on já é escrita pelo handler abaixo
+            { key = "tracers", label = "Linhas" },
             { key = "skeleton", label = "Esqueleto", setter = function(v) previewController.SetSkeleton(v) end },
         }
 
@@ -5805,7 +5614,7 @@ local function buildEspPanel(kind)
             btn.MouseButton1Click:Connect(function()
                 isEnabled = not isEnabled
                 if S[tgl.key] then S[tgl.key].on = isEnabled end
-                tgl.setter(isEnabled)
+                if tgl.setter then tgl.setter(isEnabled) end
                 btn.BackgroundColor3 = isEnabled and Library.Theme.Accent or Library.Theme.Surface2
                 btn.TextColor3 = isEnabled and Color3.new(1,1,1) or Library.Theme.Text
                 btnStroke.Color = isEnabled and Library.Theme.Accent or Library.Theme.Stroke
@@ -5868,17 +5677,13 @@ local function buildEspPanel(kind)
                 elseif key == "distance" then previewController.SetDistance(v)
                 elseif key == "healthbar" then previewController.SetHealthBar(v)
                 elseif key == "health" then previewController.SetHealth(v)
-                elseif key == "kdr" then previewController.SetKDR(v)
-                elseif key == "reports" then previewController.SetReports(v)
-                elseif key == "tracers" then previewController.SetTracers(v)
-                elseif key == "arrows" then previewController.SetArrows(v)
                 end
             end,
             Settings = function(p)
                 if S[key] then
                     p:ColorPicker({ Name = "Cor", Default = S[key].color, Callback = function(c)
                         if S[key] then S[key].color = c end
-                        if key == "highlight" or key == "box" or key == "skeleton" or key == "tracers" or key == "arrows" then
+                        if key == "highlight" or key == "box" or key == "skeleton" then
                             previewController.SetColor(c)
                         end
                     end })
@@ -5907,16 +5712,9 @@ local function buildEspPanel(kind)
         addToggle("distance", "Distância", function(p)
             p:Dropdown({ Name = "Unidade", Options = { "m", "studs" }, Default = "m", Callback = function(v) if S.distance then S.distance.unit = v end end })
         end)
-        if kind ~= "NPCs" then
-            addToggle("kdr", "K/D")
-            addToggle("reports", "Denúncias")
-        end
         addToggle("tracers", "Linhas até alvos", function(p)
             p:Dropdown({ Name = "Origem", Options = { "Baixo", "Cima" }, Default = "Baixo", Callback = function(v) if S.tracers then S.tracers.origin = v end end })
             p:Slider({ Name = "Espessura", Min = 1, Max = 4, Default = 1, Callback = function(v) if S.tracers then S.tracers.thick = v end end })
-        end)
-        addToggle("arrows", "Setas", function(p)
-            p:Slider({ Name = "Tamanho", Min = 12, Max = 30, Default = 18, Callback = function(v) if S.arrows then S.arrows.size = v end end })
         end)
         addToggle("skeleton", "Esqueleto", function(p)
             p:Slider({ Name = "Espessura", Min = 1, Max = 4, Default = 1.5, Step = 0.5, Callback = function(v) if S.skeleton then S.skeleton.thick = v end end })
